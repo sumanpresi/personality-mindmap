@@ -43,7 +43,8 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 .hidden{display:none !important;}
 
 /* ============================= CANVAS ============================= */
-#viewport{position:fixed;inset:0;overflow:hidden;cursor:grab;
+#viewport{position:fixed;inset:0;overflow:hidden;cursor:grab;touch-action:none;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none;
   background-image:radial-gradient(var(--bg-dot) 1.4px, transparent 1.4px);
   background-size:26px 26px;}
 #viewport.panning{cursor:grabbing;}
@@ -57,7 +58,7 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
   background:var(--card-bg);border-radius:10px;padding:11px 13px 10px 14px;
   box-shadow:0 6px 16px var(--card-shadow),0 1px 2px var(--card-shadow);
   border-left:4px solid var(--card-accent,var(--accent));
-  cursor:grab;user-select:none;touch-action:none;transform:translate(-50%,-50%);
+  cursor:grab;user-select:none;touch-action:none;-webkit-touch-callout:none;transform:translate(-50%,-50%);
   transition:box-shadow .15s ease, opacity .2s ease, filter .2s ease;}
 .card:active{cursor:grabbing;}
 .card.dim{opacity:.22;}
@@ -701,25 +702,106 @@ function fitToView(){
   applyTransform(); scheduleSave();
 }
 
-/* pan by dragging empty canvas */
-let panDrag = null;
-viewport.addEventListener("pointerdown", (e)=>{
-  if(e.target.closest(".card")) return;
-  hideContextMenu();
-  panDrag = {startX:e.clientX, startY:e.clientY, panX:activeBoard().camera.panX, panY:activeBoard().camera.panY};
+/* ============================================================
+   POINTER HANDLING — pan, pinch-zoom, and long-press, all aware
+   of how many fingers are actually down, so they never fight
+   each other or hand control to the browser's own gestures.
+   ============================================================ */
+const activePointers = new Map(); // pointerId -> {x,y}  (shared with card long-press gating too)
+let panState = null;
+let pinchState = null;
+let bgLongPressTimer = null;
+
+function pointersArr(){ return Array.from(activePointers.values()); }
+function ptDist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function ptMid(a,b){ return {x:(a.x+b.x)/2, y:(a.y+b.y)/2}; }
+function cancelBgLongPress(){ if(bgLongPressTimer){ clearTimeout(bgLongPressTimer); bgLongPressTimer=null; } }
+
+function beginPan(x,y){
+  panState = { startPanX: activeBoard().camera.panX, startPanY: activeBoard().camera.panY, startX:x, startY:y };
   viewport.classList.add("panning");
-  viewport.setPointerCapture(e.pointerId);
-  deselect();
+}
+function beginPinch(){
+  const pts = pointersArr();
+  const cam = activeBoard().camera;
+  pinchState = {
+    startDist: ptDist(pts[0], pts[1]) || 1,
+    startZoom: cam.zoom, startPanX: cam.panX, startPanY: cam.panY,
+    startMid: ptMid(pts[0], pts[1])
+  };
+}
+
+viewport.addEventListener("pointerdown",(e)=>{
+  activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  try{ viewport.setPointerCapture(e.pointerId); }catch(err){}
+
+  if(activePointers.size===1){
+    if(e.target.closest(".card")){ activePointers.delete(e.pointerId); return; } // the card handles its own drag
+    hideContextMenu();
+    deselect();
+    beginPan(e.clientX, e.clientY);
+    if(e.pointerType==="touch"){
+      const sx=e.clientX, sy=e.clientY;
+      bgLongPressTimer = setTimeout(()=>{
+        if(activePointers.size===1){
+          if(navigator.vibrate) navigator.vibrate(12);
+          panState = null; viewport.classList.remove("panning");
+          openCanvasContextMenu(sx, sy);
+        }
+      }, 520);
+    }
+  } else if(activePointers.size===2){
+    panState = null; cancelBgLongPress(); viewport.classList.remove("panning");
+    beginPinch();
+  } else {
+    panState = null; pinchState = null; cancelBgLongPress();
+  }
 });
+
 viewport.addEventListener("pointermove",(e)=>{
-  if(!panDrag) return;
-  activeBoard().camera.panX = panDrag.panX + (e.clientX-panDrag.startX);
-  activeBoard().camera.panY = panDrag.panY + (e.clientY-panDrag.startY);
-  applyTransform();
+  if(!activePointers.has(e.pointerId)) return;
+  activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+  if(activePointers.size===2 && pinchState){
+    const pts = pointersArr();
+    const d = ptDist(pts[0], pts[1]);
+    const mid = ptMid(pts[0], pts[1]);
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchState.startZoom * (d/pinchState.startDist)));
+    const r = viewport.getBoundingClientRect();
+    const worldAtStart = {
+      x: (pinchState.startMid.x - r.left - pinchState.startPanX) / pinchState.startZoom,
+      y: (pinchState.startMid.y - r.top - pinchState.startPanY) / pinchState.startZoom
+    };
+    const cam = activeBoard().camera;
+    cam.zoom = newZoom;
+    cam.panX = (mid.x - r.left) - worldAtStart.x*newZoom;
+    cam.panY = (mid.y - r.top) - worldAtStart.y*newZoom;
+    applyTransform();
+    return;
+  }
+
+  if(activePointers.size===1 && panState){
+    const dx = e.clientX-panState.startX, dy = e.clientY-panState.startY;
+    if(Math.hypot(dx,dy) > 10) cancelBgLongPress();
+    const cam = activeBoard().camera;
+    cam.panX = panState.startPanX + dx;
+    cam.panY = panState.startPanY + dy;
+    applyTransform();
+  }
 });
-function endPan(){ if(panDrag){ panDrag=null; viewport.classList.remove("panning"); scheduleSave(); } }
-viewport.addEventListener("pointerup", endPan);
-viewport.addEventListener("pointercancel", endPan);
+
+function endPointer(e){
+  activePointers.delete(e.pointerId);
+  cancelBgLongPress();
+  if(activePointers.size<2) pinchState = null;
+  if(activePointers.size===0){ panState=null; viewport.classList.remove("panning"); scheduleSave(); }
+  else if(activePointers.size===1){
+    const [remaining] = pointersArr();
+    beginPan(remaining.x, remaining.y); // keep panning smoothly with whichever finger is left
+  }
+}
+viewport.addEventListener("pointerup", endPointer);
+viewport.addEventListener("pointercancel", endPointer);
 
 viewport.addEventListener("wheel",(e)=>{
   e.preventDefault();
@@ -727,26 +809,6 @@ viewport.addEventListener("wheel",(e)=>{
   const factor = Math.pow(1.0016, -e.deltaY);
   zoomAt(factor, e.clientX, e.clientY);
 },{passive:false});
-
-/* pinch zoom (touch) */
-let pinch=null;
-viewport.addEventListener("touchstart",(e)=>{
-  if(e.touches.length===2){
-    const [a,b]=e.touches;
-    pinch = {dist:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),
-      cx:(a.clientX+b.clientX)/2, cy:(a.clientY+b.clientY)/2, zoom:activeBoard().camera.zoom};
-  }
-},{passive:true});
-viewport.addEventListener("touchmove",(e)=>{
-  if(e.touches.length===2 && pinch){
-    const [a,b]=e.touches;
-    const d = Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    const factor = d/pinch.dist;
-    activeBoard().camera.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinch.zoom*factor));
-    applyTransform();
-  }
-},{passive:true});
-viewport.addEventListener("touchend",()=>{ if(pinch){ pinch=null; scheduleSave(); } });
 
 document.getElementById("zIn").onclick = ()=> { const r=viewport.getBoundingClientRect(); zoomAt(1.2, r.left+r.width/2, r.top+r.height/2); };
 document.getElementById("zOut").onclick = ()=> { const r=viewport.getBoundingClientRect(); zoomAt(1/1.2, r.left+r.width/2, r.top+r.height/2); };
@@ -865,6 +927,7 @@ function attachCardEvents(el, id){
   el.addEventListener("pointerdown",(e)=>{
     if(e.target.closest(".card-title.editing")) return; // let inline text editing keep focus
     e.stopPropagation();
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY}); // keep the global gesture count accurate
     selectNode(id);
     const node = getNode(id);
     const wp = screenToWorld(e.clientX, e.clientY);
@@ -890,6 +953,7 @@ function attachCardEvents(el, id){
     } else drag.target=null;
   });
   el.addEventListener("pointerup",(e)=>{
+    activePointers.delete(e.pointerId);
     if(!drag || drag.id!==id) return;
     document.querySelectorAll(".card.dragtarget").forEach(c=>c.classList.remove("dragtarget"));
     if(drag.moved){
@@ -902,6 +966,10 @@ function attachCardEvents(el, id){
       scheduleSave();
     }
     drag=null;
+  });
+  el.addEventListener("pointercancel",(e)=>{
+    activePointers.delete(e.pointerId);
+    if(drag && drag.id===id) drag=null;
   });
   el.addEventListener("dblclick",(e)=>{ e.stopPropagation(); selectNode(id); startInlineEdit(id); });
   el.addEventListener("contextmenu",(e)=>{ e.preventDefault(); e.stopPropagation(); selectNode(id); openCardContextMenu(id, e.clientX, e.clientY); });
@@ -1099,30 +1167,19 @@ viewport.addEventListener("contextmenu",(e)=>{
   deselect();
   openCanvasContextMenu(e.clientX, e.clientY);
 });
-attachLongPressBackground();
 function attachLongPress(el, cb){
-  let timer=null, startX=0, startY=0, fired=false;
+  let timer=null, startX=0, startY=0;
   el.addEventListener("pointerdown",(e)=>{
     if(e.pointerType!=="touch") return;
-    fired=false; startX=e.clientX; startY=e.clientY;
-    timer = setTimeout(()=>{ fired=true; if(navigator.vibrate) navigator.vibrate(12); cb(startX,startY); }, 520);
+    startX=e.clientX; startY=e.clientY;
+    timer = setTimeout(()=>{
+      if(activePointers.size===1){ if(navigator.vibrate) navigator.vibrate(12); cb(startX,startY); }
+    }, 520);
   });
   el.addEventListener("pointermove",(e)=>{
     if(timer && (Math.abs(e.clientX-startX)>10 || Math.abs(e.clientY-startY)>10)){ clearTimeout(timer); timer=null; }
   });
   ["pointerup","pointercancel"].forEach(ev=> el.addEventListener(ev, ()=>{ clearTimeout(timer); timer=null; }));
-}
-function attachLongPressBackground(){
-  let timer=null, startX=0, startY=0;
-  viewport.addEventListener("pointerdown",(e)=>{
-    if(e.pointerType!=="touch" || e.target.closest(".card")) return;
-    startX=e.clientX; startY=e.clientY;
-    timer = setTimeout(()=>{ if(navigator.vibrate) navigator.vibrate(12); openCanvasContextMenu(startX,startY); }, 520);
-  });
-  viewport.addEventListener("pointermove",(e)=>{
-    if(timer && (Math.abs(e.clientX-startX)>10 || Math.abs(e.clientY-startY)>10)){ clearTimeout(timer); timer=null; }
-  });
-  ["pointerup","pointercancel"].forEach(ev=> viewport.addEventListener(ev, ()=>{ clearTimeout(timer); timer=null; }));
 }
 
 /* ============================================================
