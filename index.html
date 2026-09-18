@@ -75,6 +75,18 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 .card .card-link.backlink{color:var(--text-muted);font-weight:500;}
 .card .card-link.backlink.crossboard{color:var(--c-teal);}
 .card.selected{box-shadow:0 0 0 2.5px var(--card-accent,var(--accent)),0 10px 24px var(--card-shadow);}
+.card.multi-selected{box-shadow:0 0 0 2.5px var(--accent),0 0 0 6px var(--accent-soft) !important;}
+#viewport.select-mode{cursor:crosshair;}
+#marqueeBox{position:fixed;left:0;top:0;width:0;height:0;border:1.5px dashed var(--accent);
+  background:var(--accent-soft);z-index:35;pointer-events:none;display:none;}
+#marqueeBox.active{display:block;}
+#selectionBar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:45;
+  display:flex;align-items:center;gap:6px;background:var(--panel);backdrop-filter:blur(14px);
+  border:1px solid var(--panel-border);border-radius:14px;padding:8px 10px;box-shadow:var(--shadow-lg);
+  flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 32px);}
+#selectionBar .sel-count{font-size:12px;font-weight:700;color:var(--text-muted);padding:0 6px;white-space:nowrap;}
+.tb-btn.active{background:var(--accent);color:#fff;}
+.tb-btn.disabled{opacity:.4;pointer-events:none;}
 .card.dragtarget{box-shadow:0 0 0 3px var(--accent), 0 0 0 7px var(--accent-soft);}
 .card.central{width:190px;height:190px;text-align:center;padding:20px 22px;border-left:none;
   border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -229,6 +241,7 @@ input[type=range]{width:100%;accent-color:var(--accent);}
     <svg id="connLayer"></svg>
     <div id="cardsLayer"></div>
   </div>
+  <div id="marqueeBox"></div>
 </div>
 
 <!-- TOOLBAR -->
@@ -246,6 +259,10 @@ input[type=range]{width:100%;accent-color:var(--accent);}
     <button class="tb-btn icon-only" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↻</button>
   </div>
   <div class="tb-group">
+    <button class="tb-btn icon-only" id="btnSelectMode" title="Select multiple cards (drag on empty canvas)">⬚</button>
+    <button class="tb-btn icon-only disabled" id="btnPaste" title="Paste (Ctrl/Cmd+V)">📋</button>
+  </div>
+  <div class="tb-group">
     <button class="tb-btn" id="btnSearch" title="Search">🔍<span class="lbl">&nbsp;Search</span></button>
     <button class="tb-btn" id="btnDashboard" title="Dashboard">▤<span class="lbl">&nbsp;Dashboard</span></button>
     <button class="tb-btn" id="btnReview" title="Weekly review">🗒<span class="lbl">&nbsp;Review</span></button>
@@ -255,6 +272,16 @@ input[type=range]{width:100%;accent-color:var(--accent);}
     <button class="tb-btn" id="btnAuth" title="Sync across devices">☁︎ Sign in to sync</button>
     <button class="tb-btn icon-only" id="btnMore" title="More">⋯</button>
   </div>
+</div>
+
+<!-- SELECTION ACTION BAR -->
+<div id="selectionBar" class="hidden">
+  <span class="sel-count" id="selCount">0 selected</span>
+  <button class="btn small" id="selCopy">Copy</button>
+  <button class="btn small" id="selCut">Cut</button>
+  <button class="btn small" id="selDetach">Detach</button>
+  <button class="btn small danger" id="selDelete">Delete</button>
+  <button class="btn small" id="selClear">✕</button>
 </div>
 
 <!-- ZOOM CONTROLS -->
@@ -770,6 +797,9 @@ const activePointers = new Map(); // pointerId -> {x,y}  (shared with card long-
 let panState = null;
 let pinchState = null;
 let bgLongPressTimer = null;
+let marqueeState = null; // {startX,startY,curX,curY} in screen coords, only while selectMode is on
+let selectMode = false;
+let multiSelected = new Set();
 
 function pointersArr(){ return Array.from(activePointers.values()); }
 function ptDist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
@@ -790,6 +820,145 @@ function beginPinch(){
   };
 }
 
+/* ---------- multi-select (marquee), clipboard: copy / cut / paste ---------- */
+const marqueeBox = document.getElementById("marqueeBox");
+function beginMarquee(x,y){ marqueeState = {startX:x, startY:y, curX:x, curY:y}; updateMarqueeBox(); }
+function updateMarqueeBox(){
+  if(!marqueeState) return;
+  const x = Math.min(marqueeState.startX, marqueeState.curX);
+  const y = Math.min(marqueeState.startY, marqueeState.curY);
+  const w = Math.abs(marqueeState.curX-marqueeState.startX);
+  const h = Math.abs(marqueeState.curY-marqueeState.startY);
+  marqueeBox.style.left=x+"px"; marqueeBox.style.top=y+"px";
+  marqueeBox.style.width=w+"px"; marqueeBox.style.height=h+"px";
+  marqueeBox.classList.add("active");
+}
+function finishMarquee(){
+  if(!marqueeState) return;
+  const moved = Math.hypot(marqueeState.curX-marqueeState.startX, marqueeState.curY-marqueeState.startY) > 6;
+  if(moved){
+    const p1 = screenToWorld(Math.min(marqueeState.startX,marqueeState.curX), Math.min(marqueeState.startY,marqueeState.curY));
+    const p2 = screenToWorld(Math.max(marqueeState.startX,marqueeState.curX), Math.max(marqueeState.startY,marqueeState.curY));
+    nodesArr().forEach(n=>{ if(n.x>=p1.x && n.x<=p2.x && n.y>=p1.y && n.y<=p2.y) multiSelected.add(n.id); });
+    renderSelectionBar(); applyMultiSelectClasses();
+  } else {
+    clearMultiSelection(); // a plain tap on empty canvas while in select mode clears the current selection
+  }
+  marqueeState = null;
+  marqueeBox.classList.remove("active");
+}
+function toggleMultiSelect(id){
+  if(multiSelected.has(id)) multiSelected.delete(id); else multiSelected.add(id);
+  renderSelectionBar(); applyMultiSelectClasses();
+}
+function clearMultiSelection(){ multiSelected.clear(); renderSelectionBar(); applyMultiSelectClasses(); }
+function applyMultiSelectClasses(){
+  Object.entries(cardEls).forEach(([id,el])=> el.classList.toggle("multi-selected", multiSelected.has(id)));
+}
+function selectSubtree(rootId){
+  multiSelected = new Set([rootId, ...descendantsOf(rootId)]);
+  renderSelectionBar(); applyMultiSelectClasses();
+  toast(multiSelected.size + " card" + (multiSelected.size>1?"s":"") + " selected");
+}
+function setSelectMode(on){
+  selectMode = on;
+  document.getElementById("btnSelectMode").classList.toggle("active", on);
+  viewport.classList.toggle("select-mode", on);
+  if(!on){ marqueeState=null; marqueeBox.classList.remove("active"); }
+}
+document.getElementById("btnSelectMode").onclick = ()=> setSelectMode(!selectMode);
+
+let clipboard = null; // { nodes:[...cloned originals, ids preserved...], sourceBoardId }
+function copySelection(cut){
+  if(!multiSelected.size) return toast("Nothing selected");
+  const ids = Array.from(multiSelected);
+  const idSet = new Set(ids);
+  const originals = ids.map(getNode).filter(Boolean);
+  if(!originals.length) return;
+  const cloned = originals.map(n=> JSON.parse(JSON.stringify(n)));
+  cloned.forEach(n=>{ if(!idSet.has(n.parentId)) n.parentId = null; }); // root(s) of the copied group lose their external parent
+  clipboard = { nodes: cloned, sourceBoardId: state.activeBoardId };
+  toast((cut?"Cut ":"Copied ") + cloned.length + " card" + (cloned.length>1?"s":""));
+  document.getElementById("btnPaste").classList.remove("disabled");
+  if(cut){
+    pushHistory();
+    deleteNodesBatch(ids);
+    clearMultiSelection();
+    renderAll(); scheduleSave();
+  }
+}
+function deleteNodesBatch(ids){
+  const idSet = new Set(ids);
+  const parentOf = {}; nodesArr().forEach(n=> parentOf[n.id]=n.parentId);
+  function nearestSurvivingAncestor(pid){ while(pid && idSet.has(pid)) pid = parentOf[pid]; return pid || null; }
+  nodesArr().forEach(n=>{ if(!idSet.has(n.id) && idSet.has(n.parentId)) n.parentId = nearestSurvivingAncestor(n.parentId); });
+  activeBoard().nodes = nodesArr().filter(n=>!idSet.has(n.id));
+  if(idSet.has(selectedId)) selectedId=null;
+}
+function pasteClipboard(){
+  if(!clipboard || !clipboard.nodes.length) return toast("Clipboard is empty");
+  pushHistory();
+  const idMap = {};
+  clipboard.nodes.forEach(n=> idMap[n.id] = uid());
+  const minX = Math.min(...clipboard.nodes.map(n=>n.x));
+  const minY = Math.min(...clipboard.nodes.map(n=>n.y));
+  const pt = visibleCenterScreen();
+  const wp = screenToWorld(pt.x, pt.y);
+  const offsetX = wp.x - minX, offsetY = wp.y - minY;
+  const newNodes = clipboard.nodes.map(n=>{
+    const newLinks = (n.links||[]).map(l=>{
+      if(l.type==="card" && l.value.startsWith(clipboard.sourceBoardId+"::")){
+        const targetOldId = l.value.slice(clipboard.sourceBoardId.length+2);
+        if(idMap[targetOldId]) return {id:uid(), type:"card", value: state.activeBoardId+"::"+idMap[targetOldId]};
+      }
+      return {id:uid(), type:l.type, value:l.value};
+    });
+    return Object.assign({}, n, {
+      id: idMap[n.id],
+      parentId: n.parentId ? (idMap[n.parentId]||null) : null,
+      x: n.x+offsetX, y: n.y+offsetY,
+      links: newLinks, example:false,
+      createdAt: Date.now(), updatedAt: Date.now()
+    });
+  });
+  newNodes.forEach(n=> nodesArr().push(n));
+  multiSelected = new Set(newNodes.map(n=>n.id));
+  renderAll(); scheduleSave();
+  toast("Pasted " + newNodes.length + " card" + (newNodes.length>1?"s":""));
+  renderSelectionBar();
+  if(newNodes[0]) flashNewCard(newNodes[0].id);
+}
+function detachSelection(){
+  if(!multiSelected.size) return;
+  const idSet = multiSelected;
+  pushHistory();
+  nodesArr().forEach(n=>{ if(idSet.has(n.id) && !idSet.has(n.parentId) && n.type!=="central") n.parentId=null; });
+  renderAll(); scheduleSave();
+  toast("Detached selection");
+}
+function deleteSelection(){
+  if(!multiSelected.size) return;
+  const ids = Array.from(multiSelected).filter(id=>id!=="central");
+  if(!ids.length) return toast("The central node can't be deleted");
+  pushHistory();
+  deleteNodesBatch(ids);
+  clearMultiSelection();
+  renderAll(); scheduleSave();
+  toast("Deleted " + ids.length + " card" + (ids.length>1?"s":""));
+}
+function renderSelectionBar(){
+  const bar = document.getElementById("selectionBar");
+  if(!multiSelected.size){ bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  document.getElementById("selCount").textContent = multiSelected.size + " selected";
+}
+document.getElementById("selCopy").onclick = ()=> copySelection(false);
+document.getElementById("selCut").onclick = ()=> copySelection(true);
+document.getElementById("selDetach").onclick = detachSelection;
+document.getElementById("selDelete").onclick = deleteSelection;
+document.getElementById("selClear").onclick = clearMultiSelection;
+document.getElementById("btnPaste").onclick = pasteClipboard;
+
 viewport.addEventListener("pointerdown",(e)=>{
   activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
   try{ viewport.setPointerCapture(e.pointerId); }catch(err){}
@@ -797,23 +966,25 @@ viewport.addEventListener("pointerdown",(e)=>{
   if(activePointers.size===1){
     if(e.target.closest(".card")){ activePointers.delete(e.pointerId); return; } // the card handles its own drag
     hideContextMenu();
-    deselect();
-    beginPan(e.clientX, e.clientY);
+    if(!selectMode) deselect();
+    if(selectMode) beginMarquee(e.clientX, e.clientY); else beginPan(e.clientX, e.clientY);
     if(e.pointerType==="touch"){
       const sx=e.clientX, sy=e.clientY;
       bgLongPressTimer = setTimeout(()=>{
         if(activePointers.size===1){
           if(navigator.vibrate) navigator.vibrate(12);
-          panState = null; viewport.classList.remove("panning");
+          panState = null; marqueeState = null; marqueeBox.classList.remove("active");
+          viewport.classList.remove("panning");
           openCanvasContextMenu(sx, sy);
         }
       }, 520);
     }
   } else if(activePointers.size===2){
-    panState = null; cancelBgLongPress(); viewport.classList.remove("panning");
+    panState = null; marqueeState = null; marqueeBox.classList.remove("active");
+    cancelBgLongPress(); viewport.classList.remove("panning");
     beginPinch();
   } else {
-    panState = null; pinchState = null; cancelBgLongPress();
+    panState = null; pinchState = null; marqueeState = null; cancelBgLongPress();
   }
 });
 
@@ -839,6 +1010,13 @@ viewport.addEventListener("pointermove",(e)=>{
     return;
   }
 
+  if(activePointers.size===1 && marqueeState){
+    marqueeState.curX = e.clientX; marqueeState.curY = e.clientY;
+    if(Math.hypot(e.clientX-marqueeState.startX, e.clientY-marqueeState.startY) > 10) cancelBgLongPress();
+    updateMarqueeBox();
+    return;
+  }
+
   if(activePointers.size===1 && panState){
     const dx = e.clientX-panState.startX, dy = e.clientY-panState.startY;
     if(Math.hypot(dx,dy) > 10) cancelBgLongPress();
@@ -853,8 +1031,9 @@ function endPointer(e){
   activePointers.delete(e.pointerId);
   cancelBgLongPress();
   if(activePointers.size<2) pinchState = null;
+  if(marqueeState) finishMarquee();
   if(activePointers.size===0){ panState=null; viewport.classList.remove("panning"); scheduleSave(); }
-  else if(activePointers.size===1){
+  else if(activePointers.size===1 && !selectMode){
     const [remaining] = pointersArr();
     beginPan(remaining.x, remaining.y); // keep panning smoothly with whichever finger is left
   }
@@ -887,6 +1066,7 @@ function renderAll(){
   renderConnections();
   applyTransform();
   applyFilter();
+  applyMultiSelectClasses();
   updatePanel();
 }
 
@@ -1054,6 +1234,8 @@ function attachCardEvents(el, id){
         toast("Connected to " + getNode(drag.target).text);
       }
       scheduleSave();
+    } else if(selectMode){
+      toggleMultiSelect(id); // a plain tap in select mode adds/removes this card from the selection
     }
     drag=null;
   });
@@ -1166,6 +1348,7 @@ function openCardContextMenu(id, x, y){
     });
   }
   if(n.parentId) ctxMenu.appendChild(ctxItem("✂","Detach from parent", ()=>{ pushHistory(); detachNode(id); renderAll(); scheduleSave(); toast("Detached — now an independent card"); }));
+  if(children(id).length) ctxMenu.appendChild(ctxItem("▤","Select this + its children", ()=> selectSubtree(id)));
   ctxMenu.appendChild(ctxItem("↦","Connect to...", ()=>{ startConnectPicking(id); }));
   ctxMenu.appendChild(ctxSep());
   const sw = document.createElement("div"); sw.className="ctx-swatches";
@@ -1347,6 +1530,10 @@ document.addEventListener("keydown",(e)=>{
   if(mod && e.key.toLowerCase()==="z" && e.shiftKey){ e.preventDefault(); redo(); return; }
   if(mod && e.key.toLowerCase()==="z"){ e.preventDefault(); undo(); return; }
   if(mod && e.key.toLowerCase()==="s"){ e.preventDefault(); saveState(); toast("Saved"); return; }
+  if(mod && e.key.toLowerCase()==="c" && multiSelected.size){ e.preventDefault(); copySelection(false); return; }
+  if(mod && e.key.toLowerCase()==="x" && multiSelected.size){ e.preventDefault(); copySelection(true); return; }
+  if(mod && e.key.toLowerCase()==="v" && clipboard){ e.preventDefault(); pasteClipboard(); return; }
+  if(e.key==="Escape" && (selectMode || multiSelected.size)){ setSelectMode(false); clearMultiSelection(); return; }
   if(!selectedId) return;
   if(e.key==="Tab"){ e.preventDefault(); addChildTo(selectedId); }
   else if(e.key==="Enter"){ e.preventDefault(); addSiblingOf(selectedId); }
@@ -1757,6 +1944,7 @@ function switchBoard(id){
   if(id===state.activeBoardId) return;
   state.activeBoardId = id;
   selectedId = null;
+  multiSelected.clear(); renderSelectionBar(); // selection is per-board; the clipboard is not affected
   centerViewportIfNeeded();
   renderAll(); renderBoardsLabel(); scheduleSave();
   toast("Switched to \u201c" + activeBoard().name + "\u201d");
