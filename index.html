@@ -871,7 +871,10 @@ document.getElementById("btnSelectMode").onclick = ()=> setSelectMode(!selectMod
 let clipboard = null; // { nodes:[...cloned originals, ids preserved...], sourceBoardId }
 function copySelection(cut){
   if(!multiSelected.size) return toast("Nothing selected");
-  const ids = Array.from(multiSelected);
+  copyIds(Array.from(multiSelected), cut);
+}
+function copyIds(ids, cut){
+  if(!ids.length) return toast("Nothing to copy");
   const idSet = new Set(ids);
   const originals = ids.map(getNode).filter(Boolean);
   if(!originals.length) return;
@@ -883,7 +886,7 @@ function copySelection(cut){
   if(cut){
     pushHistory();
     deleteNodesBatch(ids);
-    clearMultiSelection();
+    if(ids.some(id=>multiSelected.has(id))) clearMultiSelection();
     renderAll(); scheduleSave();
   }
 }
@@ -895,14 +898,14 @@ function deleteNodesBatch(ids){
   activeBoard().nodes = nodesArr().filter(n=>!idSet.has(n.id));
   if(idSet.has(selectedId)) selectedId=null;
 }
-function pasteClipboard(){
+function pasteClipboard(atScreenPoint){
   if(!clipboard || !clipboard.nodes.length) return toast("Clipboard is empty");
   pushHistory();
   const idMap = {};
   clipboard.nodes.forEach(n=> idMap[n.id] = uid());
   const minX = Math.min(...clipboard.nodes.map(n=>n.x));
   const minY = Math.min(...clipboard.nodes.map(n=>n.y));
-  const pt = visibleCenterScreen();
+  const pt = atScreenPoint || visibleCenterScreen();
   const wp = screenToWorld(pt.x, pt.y);
   const offsetX = wp.x - minX, offsetY = wp.y - minY;
   const newNodes = clipboard.nodes.map(n=>{
@@ -1316,6 +1319,15 @@ function openCardContextMenu(id, x, y){
   ctxMenu.appendChild(ctxItem("＋","Add sibling", ()=>addSiblingOf(id)));
   ctxMenu.appendChild(ctxItem("⧉","Duplicate", ()=>{ pushHistory(); const c=duplicateNode(id); renderAll(); selectNode(c.id); scheduleSave(); toast("Card duplicated"); flashNewCard(c.id); }));
   ctxMenu.appendChild(ctxSep());
+  {
+    const inGroup = multiSelected.has(id) && multiSelected.size>1;
+    const copyIdList = inGroup ? Array.from(multiSelected) : [id];
+    const label = inGroup ? " " + copyIdList.length + " cards" : " this card";
+    ctxMenu.appendChild(ctxItem("⧉","Copy" + label, ()=> copyIds(copyIdList, false)));
+    ctxMenu.appendChild(ctxItem("✂","Cut" + label, ()=> copyIds(copyIdList, true)));
+    if(clipboard) ctxMenu.appendChild(ctxItem("📋","Paste here", ()=> pasteClipboard({x,y})));
+  }
+  ctxMenu.appendChild(ctxSep());
   ctxMenu.appendChild(ctxItem("✎","Card details", ()=>openPanel("details")));
   ctxMenu.appendChild(ctxItem("→","Improve this", ()=>openImproveForm(id)));
   (n.links||[]).forEach(l=>{
@@ -1449,6 +1461,7 @@ function openCanvasContextMenu(x,y){
     renderAll(); selectNode(n.id); openPanel("details"); scheduleSave();
     flashNewCard(n.id);
   }));
+  if(clipboard) ctxMenu.appendChild(ctxItem("📋","Paste here", ()=> pasteClipboard({x,y})));
   ctxMenu.appendChild(ctxItem("⤢","Fit to view", fitToView));
   ctxMenu.appendChild(ctxItem("◎","Center on Personality", ()=>centerOn("central",1)));
   ctxMenu.appendChild(ctxSep());
