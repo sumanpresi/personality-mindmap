@@ -72,6 +72,8 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
   color:var(--accent);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .card .card-link:hover{text-decoration:underline;}
 .card .card-link.crossboard{color:var(--c-teal);}
+.card .card-link.backlink{color:var(--text-muted);font-weight:500;}
+.card .card-link.backlink.crossboard{color:var(--c-teal);}
 .card.selected{box-shadow:0 0 0 2.5px var(--card-accent,var(--accent)),0 10px 24px var(--card-shadow);}
 .card.dragtarget{box-shadow:0 0 0 3px var(--accent), 0 0 0 7px var(--accent-soft);}
 .card.central{width:190px;height:190px;text-align:center;padding:20px 22px;border-left:none;
@@ -347,7 +349,7 @@ function defaultDimensions(){
 
 function seedNode(id,text,parentId,type,color,x,y,description){
   return {id, text, description: description||"", type, x, y, parentId: parentId||null,
-    color, score:null, desiredScore:null, status:null,
+    color, score:null, desiredScore:null, status:null, links:[],
     createdAt: Date.now(), updatedAt: Date.now(), example:true};
 }
 
@@ -405,32 +407,46 @@ function freshState(){
    format, so nothing already saved in someone's browser gets lost. */
 function migrateState(parsed){
   if(!parsed) return freshState();
+  let result;
   if(Array.isArray(parsed.boards) && parsed.boards.length){
     const boards = parsed.boards.map(b=>({
       id: b.id || uid(), name: b.name || "Board",
       nodes: Array.isArray(b.nodes) ? b.nodes : [],
       camera: b.camera || {zoom:1,panX:0,panY:0}
     }));
-    return {
+    result = {
       boards,
       activeBoardId: boards.some(b=>b.id===parsed.activeBoardId) ? parsed.activeBoardId : boards[0].id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
       settings: Object.assign({theme:"light", snap:false}, parsed.settings||{})
     };
-  }
-  if(Array.isArray(parsed.nodes)){
+  } else if(Array.isArray(parsed.nodes)){
     const s = parsed.settings || {};
     const board = { id: uid(), name:"My Personality", nodes: parsed.nodes,
       camera: {zoom: s.zoom||1, panX: s.panX||0, panY: s.panY||0} };
-    return {
+    result = {
       boards:[board], activeBoardId: board.id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
       settings: { theme: s.theme || "light", snap: s.snap || false }
     };
+  } else {
+    return freshState();
   }
-  return freshState();
+  // every node gets a `links` array; anyone still on the old single-link
+  // fields (link / linkNodeId) gets them folded in as the first entries,
+  // so nothing anyone already linked is ever lost.
+  result.boards.forEach(b=> b.nodes.forEach(migrateNodeLinks));
+  return result;
+}
+function migrateNodeLinks(node){
+  if(!Array.isArray(node.links)){
+    node.links = [];
+    if(node.link) node.links.push({id:uid(), type:"url", value:node.link});
+    if(node.linkNodeId) node.links.push({id:uid(), type:"card", value:node.linkNodeId});
+  }
+  delete node.link; delete node.linkNodeId;
 }
 
 /* ============================================================
@@ -576,11 +592,15 @@ function resolveLink(compound){
   const node = board.nodes.find(n=>n.id===compound.slice(i+2)); if(!node) return null;
   return {board, node};
 }
-/** every card (on any board) whose link points at this exact card */
+/** every card (on any board) with a card-link pointing at this exact card.
+    Deduplicated by source node, in case a card links to the same target twice. */
 function getBacklinks(boardId, nodeId){
   const key = boardId + "::" + nodeId;
-  const hits = [];
-  state.boards.forEach(b=> b.nodes.forEach(n=>{ if(n.linkNodeId===key) hits.push({board:b, node:n}); }));
+  const seen = new Set(); const hits = [];
+  state.boards.forEach(b=> b.nodes.forEach(n=>{
+    if(seen.has(n.id)) return;
+    if((n.links||[]).some(l=> l.type==="card" && l.value===key)){ seen.add(n.id); hits.push({board:b, node:n}); }
+  }));
   return hits;
 }
 function children(id){ return nodesArr().filter(n=>n.parentId===id); }
@@ -602,7 +622,7 @@ function createNode(parentId, text, opts){
     x: base.x + Math.cos(angle)*dist, y: base.y + Math.sin(angle)*dist,
     parentId: parentId||null,
     color: (opts&&opts.color) || (parent? parent.color : "neutral"),
-    score:null, desiredScore:null, status: opts&&opts.status || null, link: null, linkNodeId: null,
+    score:null, desiredScore:null, status: opts&&opts.status || null, links: [],
     createdAt: Date.now(), updatedAt: Date.now(), example:false
   };
   if(opts) Object.assign(node, opts, {id:node.id});
@@ -628,6 +648,7 @@ function duplicateNode(id){
   const src = getNode(id); if(!src) return null;
   const clone = Object.assign({}, src, {
     id: uid(), x: src.x+70, y: src.y+70, text: src.text+" copy",
+    links: (src.links||[]).map(l=>({id:uid(), type:l.type, value:l.value})), // fresh array + ids, never shared with the original
     createdAt: Date.now(), updatedAt: Date.now(), example:false
   });
   if(clone.type==="central") clone.type="branch"; // never duplicate as a second central node
@@ -852,16 +873,18 @@ function renderNode(node){
     s.textContent = "Now " + node.score + "/10" + (node.desiredScore!=null ? "  ·  Aim " + node.desiredScore+"/10":"");
     el.appendChild(s);
   }
-  if(node.link){
-    const a = document.createElement("a"); a.className="card-link"; a.href = node.link;
-    a.target = "_blank"; a.rel = "noopener noreferrer";
-    a.textContent = "🔗 " + displayUrl(node.link);
-    a.addEventListener("pointerdown", e=> e.stopPropagation());
-    a.addEventListener("click", e=> e.stopPropagation());
-    el.appendChild(a);
-  } else if(node.linkNodeId){
-    const resolved = resolveLink(node.linkNodeId);
-    if(resolved){
+  const shownLinks = (node.links||[]).slice(0,2);
+  shownLinks.forEach(l=>{
+    if(l.type==="url"){
+      const a = document.createElement("a"); a.className="card-link"; a.href = l.value;
+      a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.textContent = "🔗 " + displayUrl(l.value);
+      a.addEventListener("pointerdown", e=> e.stopPropagation());
+      a.addEventListener("click", e=> e.stopPropagation());
+      el.appendChild(a);
+    } else {
+      const resolved = resolveLink(l.value);
+      if(!resolved) return;
       const crossBoard = resolved.board.id !== state.activeBoardId;
       const a = document.createElement("div");
       a.className = "card-link" + (crossBoard ? " crossboard" : "");
@@ -877,6 +900,36 @@ function renderNode(node){
       });
       el.appendChild(a);
     }
+  });
+  if((node.links||[]).length > shownLinks.length){
+    const extra = node.links.length - shownLinks.length;
+    const more = document.createElement("div"); more.className="card-link"; more.style.cursor="pointer";
+    more.style.color = "var(--text-faint)";
+    more.textContent = "+" + extra + " more link" + (extra>1?"s":"");
+    more.addEventListener("pointerdown", e=> e.stopPropagation());
+    more.addEventListener("click", e=>{ e.stopPropagation(); selectNode(node.id); openPanel("details"); });
+    el.appendChild(more);
+  }
+  const backlinks = getBacklinks(state.activeBoardId, node.id);
+  if(backlinks.length){
+    const bl = document.createElement("div"); bl.style.cursor = "pointer";
+    if(backlinks.length===1){
+      const only = backlinks[0];
+      const crossBoard = only.board.id !== state.activeBoardId;
+      bl.className = "card-link backlink" + (crossBoard ? " crossboard" : "");
+      bl.textContent = (crossBoard ? "⤺ " : "⬅ ") + only.node.text + (crossBoard ? " · " + only.board.name : "");
+      bl.addEventListener("click", e=>{
+        e.stopPropagation();
+        if(crossBoard) switchBoard(only.board.id);
+        selectNode(only.node.id); centerOn(only.node.id, Math.max(activeBoard().camera.zoom,0.9)); openPanel("details");
+      });
+    } else {
+      bl.className = "card-link backlink";
+      bl.textContent = "⬅ Linked from " + backlinks.length + " cards";
+      bl.addEventListener("click", e=>{ e.stopPropagation(); selectNode(node.id); openPanel("details"); });
+    }
+    bl.addEventListener("pointerdown", e=> e.stopPropagation());
+    el.appendChild(bl);
   }
   positionCard(el, node);
   cardsLayer.appendChild(el);
@@ -1046,20 +1099,23 @@ function openCardContextMenu(id, x, y){
   ctxMenu.appendChild(ctxSep());
   ctxMenu.appendChild(ctxItem("✎","Card details", ()=>openPanel("details")));
   ctxMenu.appendChild(ctxItem("→","Improve this", ()=>openImproveForm(id)));
-  if(n.link) ctxMenu.appendChild(ctxItem("🔗","Open link", ()=> window.open(n.link, "_blank", "noopener,noreferrer")));
-  if(n.linkNodeId){
-    const resolved = resolveLink(n.linkNodeId);
-    if(resolved){
-      const crossBoard = resolved.board.id !== state.activeBoardId;
-      ctxMenu.appendChild(ctxItem(crossBoard?"⤴":"↦", "Go to \u201c"+resolved.node.text+"\u201d"+(crossBoard?" ("+resolved.board.name+")":""), ()=>{
-        if(crossBoard) switchBoard(resolved.board.id);
-        selectNode(resolved.node.id); centerOn(resolved.node.id, Math.max(activeBoard().camera.zoom,0.9)); openPanel("details");
-      }));
+  (n.links||[]).forEach(l=>{
+    if(l.type==="url"){
+      ctxMenu.appendChild(ctxItem("🔗","Open " + displayUrl(l.value), ()=> window.open(l.value, "_blank", "noopener,noreferrer")));
+    } else {
+      const resolved = resolveLink(l.value);
+      if(resolved){
+        const crossBoard = resolved.board.id !== state.activeBoardId;
+        ctxMenu.appendChild(ctxItem(crossBoard?"⤴":"↦", "Go to \u201c"+resolved.node.text+"\u201d"+(crossBoard?" ("+resolved.board.name+")":""), ()=>{
+          if(crossBoard) switchBoard(resolved.board.id);
+          selectNode(resolved.node.id); centerOn(resolved.node.id, Math.max(activeBoard().camera.zoom,0.9)); openPanel("details");
+        }));
+      }
     }
-  }
+  });
   ctxMenu.appendChild(ctxItem("↦","Link to a card...", ()=> openLinkCardPicker(id)));
-  ctxMenu.appendChild(ctxItem("🔗", n.link ? "Edit website link" : "Link to a website...", focusLinkField));
-  if(n.link||n.linkNodeId) ctxMenu.appendChild(ctxItem("✕","Remove link", ()=>{ pushHistory(); n.link=null; n.linkNodeId=null; renderAll(); scheduleSave(); toast("Link removed"); }));
+  ctxMenu.appendChild(ctxItem("🔗","Link to a website...", ()=> openAddUrlForm(id)));
+  if((n.links||[]).length) ctxMenu.appendChild(ctxItem("✎","Manage links...", focusLinkField));
   const backlinks = getBacklinks(state.activeBoardId, id);
   if(backlinks.length){
     ctxMenu.appendChild(ctxSep());
@@ -1107,25 +1163,60 @@ function openLinkCardPicker(id){
     state.boards.forEach(b=>{
       b.nodes.forEach(x=>{
         if(b.id===state.activeBoardId && x.id===id) return; // can't link to itself
+        const already = (n.links||[]).some(l=> l.type==="card" && l.value===b.id+"::"+x.id);
+        if(already) return;
         if(q && !x.text.toLowerCase().includes(q)) return;
         if(count>=40) return;
         count++;
         const crossBoard = b.id!==state.activeBoardId;
         listWrap.appendChild(ctxItem(crossBoard?"⤴":"↦", x.text + (crossBoard? "  ·  "+b.name : ""), ()=>{
           pushHistory();
-          n.linkNodeId = b.id+"::"+x.id; n.link = null; n.updatedAt = Date.now();
+          n.links = n.links || [];
+          n.links.push({id:uid(), type:"card", value:b.id+"::"+x.id});
+          n.updatedAt = Date.now();
           renderAll(); selectNode(n.id); scheduleSave();
           toast("Linked to \u201c"+x.text+"\u201d");
         }));
       });
     });
-    if(!count) listWrap.appendChild(ctxLabel("No matching cards."));
+    if(!count) listWrap.appendChild(ctxLabel("No more cards to link to."));
   }
   renderList("");
   input.addEventListener("input", ()=> renderList(input.value));
   input.addEventListener("keydown", e=> e.stopPropagation());
   input.addEventListener("pointerdown", e=> e.stopPropagation());
   input.addEventListener("click", e=> e.stopPropagation());
+  ctxMenu.classList.remove("hidden");
+  setTimeout(()=> input.focus(), 30);
+}
+function openAddUrlForm(id){
+  const n = getNode(id);
+  ctxMenu.innerHTML = "";
+  const wrap = document.createElement("div"); wrap.style.padding = "8px 8px 6px"; wrap.style.width = "220px";
+  const input = document.createElement("input");
+  input.type = "text"; input.placeholder = "https://..."; input.className = "ctx-search";
+  wrap.appendChild(input);
+  const btn = document.createElement("button");
+  btn.className = "btn primary small"; btn.style.marginTop = "8px"; btn.style.width = "100%";
+  btn.textContent = "Add link";
+  wrap.appendChild(btn);
+  ctxMenu.appendChild(wrap);
+  input.addEventListener("keydown", e=>{ e.stopPropagation(); if(e.key==="Enter"){ e.preventDefault(); btn.click(); } });
+  input.addEventListener("pointerdown", e=> e.stopPropagation());
+  input.addEventListener("click", e=> e.stopPropagation());
+  btn.addEventListener("pointerdown", e=> e.stopPropagation());
+  btn.onclick = (e)=>{
+    e.stopPropagation();
+    const v = normalizeLink(input.value);
+    if(!v) return toast("Enter a valid URL");
+    n.links = n.links || [];
+    if(n.links.some(l=> l.type==="url" && l.value===v)) return toast("That link is already added");
+    pushHistory();
+    n.links.push({id:uid(), type:"url", value:v}); n.updatedAt = Date.now();
+    renderAll(); selectNode(n.id); scheduleSave();
+    hideContextMenu();
+    toast("Link added");
+  };
   ctxMenu.classList.remove("hidden");
   setTimeout(()=> input.focus(), 30);
 }
@@ -1322,13 +1413,14 @@ function renderDetailsTab(){
   panelBody.innerHTML = `
     <div class="field"><label>Title</label><input type="text" id="fTitle" value="${escapeHtml(n.text)}"></div>
     <div class="field"><label>Notes</label><textarea id="fDesc" placeholder="Add detail, context, or a longer note...">${escapeHtml(n.description)}</textarea></div>
-    <div class="field"><label>Link to a website</label><input type="text" id="fLink" value="${escapeHtml(n.link||'')}" placeholder="https://..."></div>
-    <div class="field"><label>Or link to another card</label>
-      <select id="fLinkCard">
-        <option value="">— none —</option>
+    <div class="field"><label>Links</label>
+      <div id="linksList">${linksListHtml(n)}</div>
+      <input type="text" id="fNewLink" placeholder="https://... then press Enter" style="margin-top:6px;">
+      <select id="fAddLinkCard" style="margin-top:6px;">
+        <option value="">＋ Link to a card...</option>
         ${state.boards.map(b=>`<optgroup label="${escapeHtml(b.name)}${b.id===state.activeBoardId?' (this board)':''}">${
-          b.nodes.filter(x=>!(b.id===state.activeBoardId && x.id===n.id))
-            .map(x=>`<option value="${b.id}::${x.id}" ${n.linkNodeId===(b.id+'::'+x.id)?'selected':''}>${escapeHtml(x.text)}</option>`).join('')
+          b.nodes.filter(x=> !(b.id===state.activeBoardId && x.id===n.id) && !(n.links||[]).some(l=>l.type==="card"&&l.value===b.id+"::"+x.id))
+            .map(x=>`<option value="${b.id}::${x.id}">${escapeHtml(x.text)}</option>`).join('')
         }</optgroup>`).join('')}
       </select>
     </div>
@@ -1358,8 +1450,40 @@ function renderDetailsTab(){
   document.getElementById("fTitle").onblur = pushHistory;
   document.getElementById("fDesc").oninput = (e)=>{ n.description=e.target.value; n.updatedAt=Date.now(); renderAll(); scheduleSave(); };
   document.getElementById("fDesc").onblur = pushHistory;
-  document.getElementById("fLink").onchange = (e)=>{ pushHistory(); n.link = normalizeLink(e.target.value); if(n.link) n.linkNodeId=null; n.updatedAt=Date.now(); renderAll(); selectNode(n.id); scheduleSave(); };
-  document.getElementById("fLinkCard").onchange = (e)=>{ pushHistory(); n.linkNodeId = e.target.value || null; if(n.linkNodeId) n.link=null; n.updatedAt=Date.now(); renderAll(); selectNode(n.id); scheduleSave(); };
+  document.getElementById("fNewLink").addEventListener("keydown", (e)=>{
+    e.stopPropagation();
+    if(e.key==="Enter"){
+      e.preventDefault();
+      const input = e.target;
+      const v = normalizeLink(input.value);
+      if(!v) return toast("Enter a valid URL");
+      n.links = n.links || [];
+      if(n.links.some(l=> l.type==="url" && l.value===v)) return toast("That link is already added");
+      pushHistory();
+      n.links.push({id:uid(), type:"url", value:v}); n.updatedAt = Date.now();
+      renderAll(); selectNode(n.id); scheduleSave();
+    }
+  });
+  document.getElementById("fAddLinkCard").onchange = (e)=>{
+    const val = e.target.value; if(!val) return;
+    pushHistory();
+    n.links = n.links || [];
+    n.links.push({id:uid(), type:"card", value:val}); n.updatedAt = Date.now();
+    renderAll(); selectNode(n.id); scheduleSave();
+  };
+  panelBody.querySelectorAll("[data-removelink]").forEach(btn=> btn.onclick = ()=>{
+    pushHistory();
+    n.links = (n.links||[]).filter(l=>l.id!==btn.dataset.removelink);
+    n.updatedAt = Date.now();
+    renderAll(); selectNode(n.id); scheduleSave();
+  });
+  panelBody.querySelectorAll("[data-openurl]").forEach(el=> el.onclick = ()=> window.open(el.dataset.openurl, "_blank", "noopener,noreferrer"));
+  panelBody.querySelectorAll("[data-gotolinkval]").forEach(el=> el.onclick = ()=>{
+    const resolved = resolveLink(el.dataset.gotolinkval); if(!resolved) return;
+    const crossBoard = resolved.board.id !== state.activeBoardId;
+    if(crossBoard) switchBoard(resolved.board.id);
+    selectNode(resolved.node.id); centerOn(resolved.node.id, Math.max(activeBoard().camera.zoom,0.9)); openPanel("details");
+  });
   document.getElementById("fScore").onchange = (e)=>{ pushHistory(); const v=parseInt(e.target.value); n.score = isNaN(v)?null:Math.max(1,Math.min(10,v)); renderAll(); scheduleSave(); };
   document.getElementById("fDesired").onchange = (e)=>{ pushHistory(); const v=parseInt(e.target.value); n.desiredScore = isNaN(v)?null:Math.max(1,Math.min(10,v)); renderAll(); scheduleSave(); };
   const st = document.getElementById("fStatus"); if(st) st.onchange = (e)=>{ pushHistory(); n.status=e.target.value; renderAll(); scheduleSave(); };
@@ -1375,6 +1499,19 @@ function renderDetailsTab(){
     selectNode(resolved.node.id); centerOn(resolved.node.id, Math.max(activeBoard().camera.zoom,0.9)); openPanel("details");
   });
   const del = document.getElementById("bDelete"); if(del) del.onclick = confirmDeleteSelected;
+}
+function linksListHtml(n){
+  const links = n.links || [];
+  if(!links.length) return `<div class="hint" style="margin:2px 0 6px;">No links yet.</div>`;
+  return links.map(l=>{
+    if(l.type==="url"){
+      return `<div class="listitem"><span class="name" data-openurl="${escapeHtml(l.value)}">🔗 ${escapeHtml(displayUrl(l.value))}</span><button class="btn small danger" data-removelink="${l.id}">✕</button></div>`;
+    }
+    const resolved = resolveLink(l.value);
+    if(!resolved) return `<div class="listitem"><span class="name" style="color:var(--text-faint)">(broken link)</span><button class="btn small danger" data-removelink="${l.id}">✕</button></div>`;
+    const crossBoard = resolved.board.id !== state.activeBoardId;
+    return `<div class="listitem"><span class="name" data-gotolinkval="${l.value}">${crossBoard?"⤴ ":"↦ "}${escapeHtml(resolved.node.text)}${crossBoard?" · "+escapeHtml(resolved.board.name):""}</span><button class="btn small danger" data-removelink="${l.id}">✕</button></div>`;
+  }).join("");
 }
 function backlinksHtml(id){
   const hits = getBacklinks(state.activeBoardId, id);
@@ -1399,8 +1536,8 @@ function normalizeLink(v){
 function focusLinkField(){
   openPanel("details");
   setTimeout(()=>{
-    const f = document.getElementById("fLink");
-    if(f){ f.scrollIntoView({block:"center"}); f.focus(); f.select(); }
+    const f = document.getElementById("fNewLink");
+    if(f){ f.scrollIntoView({block:"center"}); f.focus(); }
   }, 60);
 }
 
@@ -1592,7 +1729,7 @@ function createBoardFlow(){
   const num = state.boards.length + 1;
   const name = num>1 ? "New board " + num : "New board";
   const central = { id: uid(), text: name.toUpperCase(), description:"", type:"central", x:0, y:0, parentId:null,
-    color:"indigo", score:null, desiredScore:null, status:null, link:null, linkNodeId:null,
+    color:"indigo", score:null, desiredScore:null, status:null, links:[],
     createdAt:Date.now(), updatedAt:Date.now(), example:false };
   const board = { id: uid(), name, nodes:[central], camera:{zoom:1,panX:0,panY:0} };
   state.boards.push(board);
