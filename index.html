@@ -969,7 +969,7 @@ viewport.addEventListener("pointerdown",(e)=>{
   if(activePointers.size===1){
     if(e.target.closest(".card")){ activePointers.delete(e.pointerId); return; } // the card handles its own drag
     hideContextMenu();
-    if(!selectMode) deselect();
+    if(!selectMode){ deselect(); clearMultiSelection(); }
     if(selectMode) beginMarquee(e.clientX, e.clientY); else beginPan(e.clientX, e.clientY);
     if(e.pointerType==="touch"){
       const sx=e.clientX, sy=e.clientY;
@@ -1201,6 +1201,7 @@ function attachCardEvents(el, id){
     if(e.target.closest(".card-title.editing")) return; // let inline text editing keep focus
     e.stopPropagation();
     activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY}); // keep the global gesture count accurate
+    if(!selectMode) clearMultiSelection(); // a normal (non-select-mode) card click ends any active multi-selection
     selectNode(id);
     const node = getNode(id);
     const wp = screenToWorld(e.clientX, e.clientY);
