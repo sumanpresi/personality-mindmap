@@ -259,6 +259,8 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 .board-row:hover{background:var(--accent-soft);}
 .board-row.active .board-row-name{font-weight:700;}
 .board-row-name{flex:1;font-size:13.5px;cursor:pointer;}
+.board-row-rename-input{flex:1;font-size:13.5px;padding:2px 4px;border-radius:5px;
+  border:1.5px solid var(--accent);background:var(--card-bg);color:var(--text);min-width:0;}
 .board-row-more{border:none;background:transparent;color:var(--text-muted);cursor:pointer;
   padding:4px 8px;border-radius:6px;font-size:15px;}
 .board-row-more:hover{background:var(--panel-border);}
@@ -2236,13 +2238,9 @@ function confirmDeleteBoardFlow(boardId){
   ctxMenu.appendChild(ctxItem("←","Cancel", hideContextMenu));
   ctxMenu.classList.remove("hidden");
 }
-function startBoardRenameFor(boardId){
-  if(boardId && boardId!==state.activeBoardId) switchBoard(boardId);
-  startBoardRename();
-}
 function openBoardRowMenu(boardId, x, y){
   ctxMenu.innerHTML = "";
-  ctxMenu.appendChild(ctxItem("✎","Rename", ()=> startBoardRenameFor(boardId)));
+  ctxMenu.appendChild(ctxItem("✎","Rename", ()=> startSidebarRowRename(boardId)));
   if(state.boards.length>1) ctxMenu.appendChild(ctxItem("🗑","Delete this board", ()=> confirmDeleteBoardFlow(boardId), true));
   placeContextMenu(x,y);
 }
@@ -2253,6 +2251,7 @@ function renderBoardsSidebar(){
   state.boards.forEach(b=>{
     const row = document.createElement("div");
     row.className = "board-row" + (b.id===state.activeBoardId ? " active" : "");
+    row.dataset.boardId = b.id;
     const name = document.createElement("span"); name.className = "board-row-name";
     name.textContent = (b.id===state.activeBoardId ? "● " : "○ ") + b.name;
     name.onclick = ()=> switchBoard(b.id); // sidebar stays open — it's a persistent panel now, not a one-shot drawer
@@ -2261,6 +2260,32 @@ function renderBoardsSidebar(){
     row.appendChild(name); row.appendChild(more);
     list.appendChild(row);
   });
+}
+function startSidebarRowRename(boardId){
+  const board = findBoard(boardId); if(!board) return;
+  const row = document.querySelector('#boardsSidebarList .board-row[data-board-id="'+boardId+'"]');
+  if(!row) return;
+  const nameEl = row.querySelector(".board-row-name");
+  if(!nameEl) return;
+  const input = document.createElement("input");
+  input.type = "text"; input.value = board.name; input.className = "board-row-rename-input";
+  nameEl.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  function finish(save){
+    if(done) return; done = true;
+    if(save){ const v = input.value.trim(); if(v) board.name = v; scheduleSave(); }
+    renderBoardsSidebar();
+    if(state.activeBoardId===boardId) renderBoardsLabel();
+  }
+  input.addEventListener("pointerdown", e=> e.stopPropagation());
+  input.addEventListener("click", e=> e.stopPropagation());
+  input.addEventListener("keydown", e=>{
+    e.stopPropagation();
+    if(e.key==="Enter"){ e.preventDefault(); finish(true); }
+    else if(e.key==="Escape"){ e.preventDefault(); finish(false); }
+  });
+  input.addEventListener("blur", ()=> finish(true));
 }
 function openBoardsSidebar(){
   document.getElementById("boardsSidebar").classList.add("open");
