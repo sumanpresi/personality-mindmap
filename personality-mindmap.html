@@ -145,6 +145,14 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
   transition:box-shadow .15s ease, opacity .2s ease, filter .2s ease;}
 .card:active{cursor:grabbing;}
 .card.dim{opacity:.22;}
+.resize-handle{position:absolute;right:-7px;bottom:-7px;width:15px;height:15px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--card-bg);cursor:nwse-resize;touch-action:none;
+  display:none;z-index:3;}
+.card.selected .resize-handle{display:block;}
+.card.shape-pill{border-radius:999px !important;}
+.card.shape-circle{border-radius:50% !important;aspect-ratio:1/1;
+  display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;}
+.card.shape-circle .card-link,.card.shape-circle .card-score{display:none;} /* keep the circle uncluttered — full detail still lives in the Details panel */
 .card .card-title{font-family:var(--font-display);font-size:17px;font-weight:400;line-height:1.28;word-break:break-word;}
 
 /* ---- per-style card shape/shadow/border treatment ---- */
@@ -218,7 +226,7 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
   border:1px solid var(--panel-border);}
 
 /* ============================= TOOLBAR ============================= */
-.toolbar{position:fixed;top:16px;left:16px;z-index:40;display:flex;gap:8px;align-items:center;
+.toolbar{position:fixed;top:16px;left:16px;z-index:50;display:flex;gap:8px;align-items:center;
   flex-wrap:wrap;max-width:calc(100vw - 32px);}
 .tb-group{display:flex;gap:4px;background:var(--panel);backdrop-filter:blur(14px);
   border:1px solid var(--panel-border);border-radius:12px;padding:5px;box-shadow:var(--shadow-lg);}
@@ -227,6 +235,7 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 .tb-btn:hover{background:var(--accent-soft);}
 .tb-btn.icon-only{padding:7px 9px;}
 .tb-btn svg{width:15px;height:15px;flex:none;}
+.tb-btn .lbl.mobile-only{display:none;}
 .brand{font-family:var(--font-display);font-weight:600;font-size:14px;padding:7px 10px 7px 10px;
   display:flex;align-items:center;color:var(--text);cursor:pointer;border-radius:8px;user-select:none;}
 .brand:hover{background:var(--accent-soft);}
@@ -243,6 +252,29 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 .zoomctl .pct{text-align:center;font-size:11px;color:var(--text-muted);padding:4px 0;border-top:1px solid var(--panel-border);border-bottom:1px solid var(--panel-border);}
 
 /* ============================= SIDE PANEL ============================= */
+/* ============================= BOARDS SIDEBAR ============================= */
+#boardsSidebar{position:fixed;top:0;left:0;bottom:0;width:280px;max-width:84vw;background:var(--panel);
+  backdrop-filter:blur(18px);border-right:1px solid var(--panel-border);z-index:49;
+  display:flex;flex-direction:column;transform:translateX(-100%);
+  transition:transform .28s cubic-bezier(.2,.8,.2,1);box-shadow:18px 0 40px rgba(0,0,0,.12);}
+#boardsSidebar.open{transform:translateX(0);}
+.boards-sidebar-head{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 10px;
+  border-bottom:1px solid var(--panel-border);}
+.boards-sidebar-head h2{font-family:var(--font-display);font-size:17px;margin:0;font-weight:600;}
+.boards-sidebar-list{flex:1;overflow-y:auto;padding:8px;}
+.board-row{display:flex;align-items:center;justify-content:space-between;gap:6px;
+  padding:10px 10px;border-radius:10px;cursor:pointer;}
+.board-row:hover{background:var(--accent-soft);}
+.board-row.active .board-row-name{font-weight:700;}
+.board-row-name{flex:1;font-size:13.5px;cursor:pointer;}
+.board-row-rename-input{flex:1;font-size:13.5px;padding:2px 4px;border-radius:5px;
+  border:1.5px solid var(--accent);background:var(--card-bg);color:var(--text);min-width:0;}
+.board-row-more{border:none;background:transparent;color:var(--text-muted);cursor:pointer;
+  padding:4px 8px;border-radius:6px;font-size:15px;}
+.board-row-more:hover{background:var(--panel-border);}
+.boards-sidebar-foot{padding:12px 16px;border-top:1px solid var(--panel-border);}
+.boards-sidebar-foot .btn{width:100%;}
+
 #panel{position:fixed;top:0;right:0;bottom:0;width:340px;max-width:92vw;background:var(--panel);
   backdrop-filter:blur(18px);border-left:1px solid var(--panel-border);z-index:50;
   display:flex;flex-direction:column;transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
@@ -265,6 +297,10 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 .field .hint{font-size:10.5px;color:var(--text-faint);margin-top:4px;}
 .swatches{display:flex;gap:6px;flex-wrap:wrap;}
 .swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;}
+.shape-swatch{width:30px;height:30px;border-radius:8px;border:1.5px solid var(--panel-border);
+  display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;
+  background:var(--card-bg);color:var(--text);}
+.shape-swatch.active{border-color:var(--accent);background:var(--accent-soft);}
 .swatch.active{border-color:var(--text);}
 .row2{display:flex;gap:8px;}
 .row2 .field{flex:1;}
@@ -336,6 +372,18 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 .card.just-created{animation:cardPop .55s cubic-bezier(.2,.8,.3,1.3);
   box-shadow:0 0 0 3px var(--card-accent,var(--accent)),0 0 0 9px var(--accent-soft),0 10px 24px var(--card-shadow) !important;}
 
+/* Quick-action pills: a one-thumb shortcut to the two most common actions.
+   Hidden on desktop — the full toolbar already covers these there. */
+#quickActions{position:fixed;left:16px;bottom:16px;z-index:40;display:none;gap:10px;align-items:flex-end;}
+#quickActions button{border:none;cursor:pointer;display:flex;align-items:center;gap:9px;
+  box-shadow:var(--shadow-lg);}
+#qaAdd{background:var(--accent);color:#fff;border-radius:30px;padding:14px 20px;font-weight:700;font-size:14px;}
+#qaAdd .qa-icon{font-size:18px;line-height:1;}
+#qaAdd .qa-text small{display:block;font-weight:500;font-size:10.5px;opacity:.85;margin-top:1px;}
+#qaSearch{background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--panel-border);
+  color:var(--text);border-radius:50%;width:48px;height:48px;justify-content:center;font-size:18px;}
+#qaSearch .qa-text{display:none;}
+
 /* mobile */
 @media (max-width:720px){
   #panel{top:auto;left:0;right:0;bottom:0;width:100%;max-width:100%;height:72vh;border-left:none;
@@ -346,10 +394,13 @@ input[type=range]{width:100%;accent-color:var(--accent);}
     padding-bottom:4px;scrollbar-width:none;}
   .toolbar::-webkit-scrollbar{display:none;}
   .tb-group{flex:none;}
-  .tb-btn span.lbl{display:none;}
-  .tb-btn.icon-only{padding:9px 11px;font-size:16px;}
+  .tb-btn{flex-direction:column;gap:2px;padding:8px 12px 7px;font-size:19px;min-width:46px;}
+  .tb-btn .lbl,.tb-btn .lbl.mobile-only{display:block;font-size:9.5px;font-weight:700;
+    line-height:1;letter-spacing:.1px;color:var(--text-muted);}
+  .tb-btn.icon-only{padding:8px 11px 7px;}
   .brand{font-size:14px;padding:9px 11px;white-space:nowrap;}
   #selectionBar{left:10px;right:10px;transform:none;bottom:10px;max-width:calc(100vw - 20px);}
+  #quickActions{display:flex;}
 }
 </style>
 </head>
@@ -366,31 +417,54 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 <!-- TOOLBAR -->
 <div class="toolbar">
   <div class="tb-group">
+    <button class="tb-btn icon-only" id="btnBoardsSidebar" title="Show/hide boards">☰</button>
+  </div>
+  <div class="tb-group">
     <div class="brand" id="btnBoards" title="Switch or manage boards">My Personality  ⌄</div>
   </div>
   <div class="tb-group">
-    <button class="tb-btn" id="btnNewCard" title="New card">✚<span class="lbl">&nbsp;New card</span></button>
-    <button class="tb-btn icon-only" id="btnFit" title="Fit to view">⤢</button>
-    <button class="tb-btn icon-only" id="btnCenter" title="Center on Personality">◎</button>
+    <button class="tb-btn icon-only" id="btnUndo" title="Undo (Ctrl+Z)">↺<span class="lbl mobile-only">Undo</span></button>
+    <button class="tb-btn icon-only" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↻<span class="lbl mobile-only">Redo</span></button>
   </div>
   <div class="tb-group">
-    <button class="tb-btn icon-only" id="btnUndo" title="Undo (Ctrl+Z)">↺</button>
-    <button class="tb-btn icon-only" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↻</button>
+    <button class="tb-btn" id="btnNewCard" title="New card">✚<span class="lbl">New card</span></button>
+  </div>
+  <div class="tb-group">
+    <button class="tb-btn icon-only" id="btnTheme" title="Theme & style">🎨<span class="lbl mobile-only">Theme</span></button>
+    <button class="tb-btn icon-only" id="btnFit" title="Fit to view">⤢<span class="lbl mobile-only">Fit</span></button>
+    <button class="tb-btn icon-only" id="btnCenter" title="Center on Personality">◎</button>
   </div>
   <div class="tb-group">
     <button class="tb-btn icon-only" id="btnSelectMode" title="Select multiple cards (drag on empty canvas)">⬚</button>
     <button class="tb-btn icon-only disabled" id="btnPaste" title="Paste (Ctrl/Cmd+V)">📋</button>
   </div>
   <div class="tb-group">
-    <button class="tb-btn" id="btnSearch" title="Search">🔍<span class="lbl">&nbsp;Search</span></button>
-    <button class="tb-btn" id="btnDashboard" title="Dashboard">▤<span class="lbl">&nbsp;Dashboard</span></button>
-    <button class="tb-btn" id="btnReview" title="Weekly review">🗒<span class="lbl">&nbsp;Review</span></button>
+    <button class="tb-btn" id="btnSearch" title="Search">🔍<span class="lbl">Search</span></button>
+    <button class="tb-btn" id="btnDashboard" title="Dashboard">▤<span class="lbl">Dashboard</span></button>
+    <button class="tb-btn" id="btnReview" title="Weekly review">🗒<span class="lbl">Review</span></button>
   </div>
   <div class="tb-group">
-    <button class="tb-btn icon-only" id="btnTheme" title="Toggle theme">◐</button>
-    <button class="tb-btn icon-only" id="btnStyle" title="Change visual style">🎨</button>
-    <button class="tb-btn icon-only" id="btnAuth" title="Sync across devices">☁︎</button>
-    <button class="tb-btn icon-only" id="btnMore" title="More">⋯</button>
+    <button class="tb-btn icon-only" id="btnAuth" title="Sync across devices">☁︎<span class="lbl mobile-only">Sync</span></button>
+    <button class="tb-btn icon-only" id="btnMore" title="More">⋯<span class="lbl mobile-only">More</span></button>
+  </div>
+</div>
+
+<!-- MOBILE QUICK-ACTION PILLS -->
+<div id="quickActions">
+  <button id="qaAdd"><span class="qa-icon">✚</span><span class="qa-text">Quick Add<small>Capture a thought</small></span></button>
+  <button id="qaSearch"><span class="qa-icon">🔍</span><span class="qa-text">Search</span></button>
+</div>
+
+<!-- BOARDS SIDEBAR -->
+<div id="boardsSidebar" class="open">
+  <div class="boards-sidebar-head">
+    <h2>Boards</h2>
+    <button class="panel-close" id="boardsSidebarClose">✕</button>
+  </div>
+  <div class="boards-sidebar-list" id="boardsSidebarList"></div>
+  <div class="boards-sidebar-foot">
+    <button class="btn primary small" id="boardsSidebarNew">＋ New board</button>
+    <button class="btn small" id="boardsSidebarTrash" style="margin-top:6px;">🗑 Trash</button>
   </div>
 </div>
 
@@ -427,6 +501,7 @@ input[type=range]{width:100%;accent-color:var(--accent);}
     <div class="ptab" data-tab="dashboard">Dashboard</div>
     <div class="ptab" data-tab="review">Review</div>
     <div class="ptab" data-tab="search">Search</div>
+    <div class="ptab" data-tab="trash">Trash</div>
   </div>
   <div class="panel-body" id="panelBody"></div>
 </div>
@@ -449,6 +524,11 @@ const COLORS = [
   {key:"cyan",    var:"--c-cyan",    label:"Relationships"},
   {key:"teal",    var:"--c-teal",    label:"Improvement"},
   {key:"neutral", var:"--c-neutral", label:"Other"}
+];
+const SHAPES = [
+  {key:"rounded", icon:"▢", label:"Rounded"},
+  {key:"pill",    icon:"⬭", label:"Pill"},
+  {key:"circle",  icon:"◯", label:"Circle"}
 ];
 const MIN_ZOOM = 0.15, MAX_ZOOM = 2.5;
 const HISTORY_LIMIT = 60;
@@ -496,7 +576,7 @@ function defaultDimensions(){
 
 function seedNode(id,text,parentId,type,color,x,y,description){
   return {id, text, description: description||"", type, x, y, parentId: parentId||null,
-    color, score:null, desiredScore:null, status:null, links:[],
+    color, score:null, desiredScore:null, status:null, links:[], width:null, height:null,
     createdAt: Date.now(), updatedAt: Date.now(), example:true};
 }
 
@@ -586,6 +666,7 @@ function freshState(){
     activeBoardId: board.id,
     dimensions: defaultDimensions(),
     reviews: [],
+    trash: { nodes: [], boards: [] },
     settings: { snap:false }
   };
 }
@@ -609,6 +690,7 @@ function migrateState(parsed){
       activeBoardId: boards.some(b=>b.id===parsed.activeBoardId) ? parsed.activeBoardId : boards[0].id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
+      trash: { nodes: (parsed.trash&&parsed.trash.nodes)||[], boards: (parsed.trash&&parsed.trash.boards)||[] },
       settings: Object.assign({snap:false}, parsed.settings||{})
     };
   } else if(Array.isArray(parsed.nodes)){
@@ -620,6 +702,7 @@ function migrateState(parsed){
       boards:[board], activeBoardId: board.id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
+      trash: { nodes: (parsed.trash&&parsed.trash.nodes)||[], boards: (parsed.trash&&parsed.trash.boards)||[] },
       settings: { snap: s.snap || false }
     };
   } else {
@@ -818,7 +901,7 @@ function createNode(parentId, text, opts){
     x: base.x + Math.cos(angle)*dist, y: base.y + Math.sin(angle)*dist,
     parentId: parentId||null,
     color: (opts&&opts.color) || (parent? parent.color : "neutral"),
-    score:null, desiredScore:null, status: opts&&opts.status || null, links: [],
+    score:null, desiredScore:null, status: opts&&opts.status || null, links: [], shape: null, width: null, height: null,
     createdAt: Date.now(), updatedAt: Date.now(), example:false
   };
   if(opts) Object.assign(node, opts, {id:node.id});
@@ -831,8 +914,55 @@ function deleteNode(id){
   const node = getNode(id); if(!node) return;
   // reparent direct children up to this node's parent to avoid orphaning the tree
   children(id).forEach(c=> c.parentId = node.parentId);
+  trashNode(node, state.activeBoardId);
   activeBoard().nodes = nodesArr().filter(n=>n.id!==id);
   if(selectedId===id) selectedId=null;
+}
+
+/* ---------- Trash: a safety net for accidental deletes ---------- */
+function trashNode(node, boardId){
+  state.trash.nodes.unshift(Object.assign({}, node, {boardId, deletedAt: Date.now()}));
+  if(state.trash.nodes.length>200) state.trash.nodes.length = 200; // bounded — oldest fall off first
+}
+function trashBoard(board){
+  state.trash.boards.unshift(Object.assign({}, board, {deletedAt: Date.now()}));
+  if(state.trash.boards.length>50) state.trash.boards.length = 50;
+}
+function restoreNode(trashedId){
+  const idx = state.trash.nodes.findIndex(n=>n.id===trashedId);
+  if(idx<0) return;
+  const trashed = state.trash.nodes[idx];
+  const board = findBoard(trashed.boardId) || activeBoard();
+  const restored = Object.assign({}, trashed);
+  delete restored.boardId; delete restored.deletedAt;
+  if(restored.parentId && !board.nodes.some(n=>n.id===restored.parentId)) restored.parentId = null; // original parent is gone — restore as a root card instead
+  if(board.nodes.some(n=>n.id===restored.id)) restored.id = uid(); // guard against an (extremely unlikely) id collision
+  pushHistory();
+  board.nodes.push(restored);
+  state.trash.nodes.splice(idx,1);
+  if(board.id===state.activeBoardId) renderAll();
+  scheduleSave();
+  toast("Restored \u201c" + restored.text + "\u201d" + (board.id!==state.activeBoardId ? " to \u201c"+board.name+"\u201d" : ""));
+}
+function restoreBoard(trashedId){
+  const idx = state.trash.boards.findIndex(b=>b.id===trashedId);
+  if(idx<0) return;
+  const restored = Object.assign({}, state.trash.boards[idx]);
+  delete restored.deletedAt;
+  if(state.boards.some(b=>b.id===restored.id)) restored.id = uid();
+  pushHistory();
+  state.boards.push(restored);
+  state.trash.boards.splice(idx,1);
+  renderBoardsLabel(); scheduleSave();
+  toast("Restored board \u201c" + restored.name + "\u201d");
+}
+function permanentlyDeleteTrashedNode(id){ state.trash.nodes = state.trash.nodes.filter(n=>n.id!==id); scheduleSave(); }
+function permanentlyDeleteTrashedBoard(id){ state.trash.boards = state.trash.boards.filter(b=>b.id!==id); scheduleSave(); }
+function emptyTrash(){
+  if(!state.trash.nodes.length && !state.trash.boards.length) return toast("Trash is already empty");
+  pushHistory();
+  state.trash = {nodes:[], boards:[]};
+  scheduleSave(); renderTrashTab(); toast("Trash emptied");
 }
 
 function detachNode(id){
@@ -1016,16 +1146,20 @@ function copyIds(ids, cut){
   document.getElementById("btnPaste").classList.remove("disabled");
   if(cut){
     pushHistory();
-    deleteNodesBatch(ids);
+    deleteNodesBatch(ids, {skipTrash:true});
     if(ids.some(id=>multiSelected.has(id))) clearMultiSelection();
     renderAll(); scheduleSave();
   }
 }
-function deleteNodesBatch(ids){
+function deleteNodesBatch(ids, opts){
   const idSet = new Set(ids);
   const parentOf = {}; nodesArr().forEach(n=> parentOf[n.id]=n.parentId);
   function nearestSurvivingAncestor(pid){ while(pid && idSet.has(pid)) pid = parentOf[pid]; return pid || null; }
   nodesArr().forEach(n=>{ if(!idSet.has(n.id) && idSet.has(n.parentId)) n.parentId = nearestSurvivingAncestor(n.parentId); });
+  if(!opts || !opts.skipTrash){
+    const boardId = state.activeBoardId;
+    ids.forEach(id=>{ const n = getNode(id); if(n) trashNode(n, boardId); });
+  }
   activeBoard().nodes = nodesArr().filter(n=>!idSet.has(n.id));
   if(idSet.has(selectedId)) selectedId=null;
 }
@@ -1082,8 +1216,10 @@ function deleteSelection(){
 }
 function renderSelectionBar(){
   const bar = document.getElementById("selectionBar");
-  if(!multiSelected.size){ bar.classList.add("hidden"); return; }
+  const qa = document.getElementById("quickActions");
+  if(!multiSelected.size){ bar.classList.add("hidden"); qa.style.display=""; return; }
   bar.classList.remove("hidden");
+  qa.style.display = "none"; // avoid colliding with the selection bar at the bottom on mobile
   document.getElementById("selCount").textContent = multiSelected.size + " selected";
 }
 document.getElementById("selCopy").onclick = ()=> copySelection(false);
@@ -1101,6 +1237,7 @@ viewport.addEventListener("pointerdown",(e)=>{
     if(e.target.closest(".card")){ activePointers.delete(e.pointerId); return; } // the card handles its own drag
     hideContextMenu();
     if(!selectMode){ deselect(); clearMultiSelection(); }
+    closeBoardsSidebarOnMobileTap();
     if(selectMode) beginMarquee(e.clientX, e.clientY); else beginPan(e.clientX, e.clientY);
     if(e.pointerType==="touch"){
       const sx=e.clientX, sy=e.clientY;
@@ -1210,6 +1347,7 @@ function renderNode(node){
   if(node.example) el.classList.add("example-tag");
   el.style.setProperty("--card-accent", cssColor(node.color));
   el.dataset.id = node.id;
+  if(node.shape && node.type!=="central") el.classList.add("shape-"+node.shape);
   const title = document.createElement("div"); title.className="card-title"; title.textContent = node.text;
   el.appendChild(title);
   if(node.description && node.type!=="central"){
@@ -1282,10 +1420,16 @@ function renderNode(node){
     bl.addEventListener("pointerdown", e=> e.stopPropagation());
     el.appendChild(bl);
   }
+  if(node.width || node.height){
+    el.style.maxWidth = "none"; el.style.minWidth = "0";
+    if(node.width) el.style.width = node.width + "px";
+    if(node.height) el.style.height = node.height + "px";
+  }
   positionCard(el, node);
   cardsLayer.appendChild(el);
   cardEls[node.id] = el;
   attachCardEvents(el, node.id);
+  if(node.type!=="central") attachResizeHandle(el, node.id);
 }
 
 function positionCard(el, node){
@@ -1342,6 +1486,7 @@ function attachCardEvents(el, id){
     e.stopPropagation();
     activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY}); // keep the global gesture count accurate
     if(!selectMode) clearMultiSelection(); // a normal (non-select-mode) card click ends any active multi-selection
+    closeBoardsSidebarOnMobileTap();
     selectNode(id);
     const node = getNode(id);
     const wp = screenToWorld(e.clientX, e.clientY);
@@ -1390,6 +1535,47 @@ function attachCardEvents(el, id){
   el.addEventListener("dblclick",(e)=>{ e.stopPropagation(); selectNode(id); startInlineEdit(id); });
   el.addEventListener("contextmenu",(e)=>{ e.preventDefault(); e.stopPropagation(); selectNode(id); openCardContextMenu(id, e.clientX, e.clientY); });
   attachLongPress(el, (x,y)=>{ selectNode(id); openCardContextMenu(id, x, y); });
+}
+
+/* ---------- Resize handle (drag the corner to freely reshape a card) ---------- */
+function attachResizeHandle(el, id){
+  const handle = document.createElement("div"); handle.className = "resize-handle";
+  el.appendChild(handle);
+  let rs = null;
+  handle.addEventListener("pointerdown",(e)=>{
+    e.stopPropagation();
+    const node = getNode(id); if(!node) return;
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    const rect = el.getBoundingClientRect();
+    const zoom = activeBoard().camera.zoom;
+    rs = { startX:e.clientX, startY:e.clientY, startW: rect.width/zoom, startH: rect.height/zoom };
+    handle.setPointerCapture(e.pointerId);
+  });
+  handle.addEventListener("pointermove",(e)=>{
+    if(!rs) return;
+    const node = getNode(id); if(!node) return;
+    const zoom = activeBoard().camera.zoom;
+    const dx = (e.clientX-rs.startX)/zoom, dy = (e.clientY-rs.startY)/zoom;
+    node.width = Math.max(90, Math.round(rs.startW + dx));
+    node.height = Math.max(50, Math.round(rs.startH + dy));
+    el.style.minWidth = "0"; el.style.maxWidth = "640px";
+    el.style.width = node.width + "px"; el.style.height = node.height + "px";
+  });
+  function endResize(e){
+    activePointers.delete(e.pointerId);
+    if(!rs) return;
+    rs = null;
+    pushHistory(); scheduleSave();
+  }
+  handle.addEventListener("pointerup", endResize);
+  handle.addEventListener("pointercancel", endResize);
+  handle.addEventListener("dblclick",(e)=>{
+    e.stopPropagation();
+    pushHistory();
+    const node = getNode(id); node.width=null; node.height=null;
+    renderAll(); selectNode(id); scheduleSave();
+    toast("Size reset to fit content");
+  });
 }
 
 /* ---------- Inline title editing (double-click a card) ---------- */
@@ -1519,6 +1705,16 @@ function openCardContextMenu(id, x, y){
     sw.appendChild(dot);
   });
   ctxMenu.appendChild(sw);
+  if(id!=="central"){
+    const shapeRow = document.createElement("div"); shapeRow.className="ctx-swatches";
+    SHAPES.forEach(s=>{
+      const btn = document.createElement("div"); btn.className="shape-swatch"+((n.shape||"rounded")===s.key?" active":"");
+      btn.textContent = s.icon; btn.title = s.label;
+      btn.onclick = ()=>{ hideContextMenu(); pushHistory(); n.shape = s.key==="rounded"?null:s.key; renderAll(); selectNode(id); scheduleSave(); };
+      shapeRow.appendChild(btn);
+    });
+    ctxMenu.appendChild(shapeRow);
+  }
   if(id!=="central"){ ctxMenu.appendChild(ctxSep());
     ctxMenu.appendChild(ctxItem("🗑","Delete card", ()=>{ selectNode(id); confirmDeleteSelected(); }, true)); }
   placeContextMenu(x,y);
@@ -1778,12 +1974,15 @@ document.querySelectorAll(".ptab").forEach(t=> t.onclick = ()=> togglePanel(t.da
 document.getElementById("btnDashboard").onclick = ()=> togglePanel("dashboard");
 document.getElementById("btnReview").onclick = ()=> togglePanel("review");
 document.getElementById("btnSearch").onclick = ()=> togglePanel("search");
+document.getElementById("qaAdd").onclick = ()=> document.getElementById("btnNewCard").click();
+document.getElementById("qaSearch").onclick = ()=> togglePanel("search");
 
 function updatePanel(){
   if(panelTab==="details") renderDetailsTab();
   else if(panelTab==="dashboard") renderDashboardTab();
   else if(panelTab==="review") renderReviewTab();
   else if(panelTab==="search") renderSearchTab();
+  else if(panelTab==="trash") renderTrashTab();
 }
 
 /* ---------- DETAILS TAB ---------- */
@@ -1795,6 +1994,9 @@ function renderDetailsTab(){
   }
   const n = getNode(selectedId);
   const swatches = COLORS.map(c=>`<div class="swatch ${n.color===c.key?'active':''}" data-color="${c.key}" style="background:${cssColor(c.key)}" title="${c.label}"></div>`).join("");
+  const shapeField = n.type==="central" ? "" : `<div class="field"><label>Shape</label><div class="swatches">
+    ${SHAPES.map(s=>`<div class="shape-swatch ${((n.shape||"rounded")===s.key)?'active':''}" data-shape="${s.key}" title="${s.label}">${s.icon}</div>`).join('')}
+  </div></div>`;
   panelBody.innerHTML = `
     <div class="field"><label>Title</label><input type="text" id="fTitle" value="${escapeHtml(n.text)}"></div>
     <div class="field"><label>Notes</label><textarea id="fDesc" placeholder="Add detail, context, or a longer note...">${escapeHtml(n.description)}</textarea></div>
@@ -1810,6 +2012,7 @@ function renderDetailsTab(){
       </select>
     </div>
     <div class="field"><label>Colour / category</label><div class="swatches">${swatches}</div></div>
+    ${shapeField}
     <div class="row2">
       <div class="field"><label>Current score (1–10)</label><input type="text" id="fScore" value="${n.score??''}" placeholder="—"></div>
       <div class="field"><label>Desired score</label><input type="text" id="fDesired" value="${n.desiredScore??''}" placeholder="—"></div>
@@ -1873,6 +2076,7 @@ function renderDetailsTab(){
   document.getElementById("fDesired").onchange = (e)=>{ pushHistory(); const v=parseInt(e.target.value); n.desiredScore = isNaN(v)?null:Math.max(1,Math.min(10,v)); renderAll(); scheduleSave(); };
   const st = document.getElementById("fStatus"); if(st) st.onchange = (e)=>{ pushHistory(); n.status=e.target.value; renderAll(); scheduleSave(); };
   panelBody.querySelectorAll(".swatch").forEach(s=> s.onclick = ()=>{ pushHistory(); n.color = s.dataset.color; renderAll(); selectNode(n.id); scheduleSave(); });
+  panelBody.querySelectorAll(".shape-swatch").forEach(s=> s.onclick = ()=>{ pushHistory(); n.shape = s.dataset.shape==="rounded" ? null : s.dataset.shape; renderAll(); selectNode(n.id); scheduleSave(); });
   document.getElementById("bAddChild").onclick = ()=> addChildTo(n.id);
   document.getElementById("bAddSibling").onclick = ()=> addSiblingOf(n.id);
   const bd = document.getElementById("bDetach"); if(bd) bd.onclick = ()=>{ pushHistory(); detachNode(n.id); renderAll(); scheduleSave(); toast("Detached — now an independent card"); };
@@ -2094,12 +2298,46 @@ function runSearch(q){
   });
 }
 
+/* ---------- TRASH TAB ---------- */
+function renderTrashTab(){
+  panelTitle.textContent = "Trash";
+  const trash = state.trash || {nodes:[], boards:[]};
+  const faint = 'style="color:var(--text-faint);font-size:11px;"';
+  const boardsHtml = trash.boards.length ? trash.boards.map(b=>`
+    <div class="listitem"><span class="name">${escapeHtml(b.name)} <span ${faint}>(${b.nodes.length} card${b.nodes.length===1?"":"s"})</span></span>
+    <span><button class="btn small" data-restoreboard="${b.id}">Restore</button>
+    <button class="btn small danger" data-purgeboard="${b.id}">Delete forever</button></span></div>
+  `).join("") : `<div class="empty-state">No deleted boards.</div>`;
+  const nodesHtml = trash.nodes.length ? trash.nodes.map(n=>{
+    const fromBoard = findBoard(n.boardId);
+    return `<div class="listitem"><span class="name">${escapeHtml(n.text)} <span ${faint}>${fromBoard?"from \u201c"+escapeHtml(fromBoard.name)+"\u201d":"(original board deleted)"}</span></span>
+    <span><button class="btn small" data-restorenode="${n.id}">Restore</button>
+    <button class="btn small danger" data-purgenode="${n.id}">Delete forever</button></span></div>`;
+  }).join("") : `<div class="empty-state">No deleted cards.</div>`;
+  panelBody.innerHTML = `
+    <div class="field hint" style="margin-bottom:10px;">Deleted cards and boards stay here until you restore them or empty the trash.</div>
+    <div class="btnrow" style="margin-bottom:2px;"><button class="btn small danger" id="btnEmptyTrash">Empty trash</button></div>
+    <div class="divider"></div>
+    <div class="sectiontitle">Deleted boards (${trash.boards.length})</div>
+    ${boardsHtml}
+    <div class="divider"></div>
+    <div class="sectiontitle">Deleted cards (${trash.nodes.length})</div>
+    ${nodesHtml}
+  `;
+  panelBody.querySelectorAll("[data-restoreboard]").forEach(b=> b.onclick = ()=>{ restoreBoard(b.dataset.restoreboard); renderTrashTab(); });
+  panelBody.querySelectorAll("[data-purgeboard]").forEach(b=> b.onclick = ()=>{ permanentlyDeleteTrashedBoard(b.dataset.purgeboard); renderTrashTab(); });
+  panelBody.querySelectorAll("[data-restorenode]").forEach(b=> b.onclick = ()=>{ restoreNode(b.dataset.restorenode); renderTrashTab(); });
+  panelBody.querySelectorAll("[data-purgenode]").forEach(b=> b.onclick = ()=>{ permanentlyDeleteTrashedNode(b.dataset.purgenode); renderTrashTab(); });
+  document.getElementById("btnEmptyTrash").onclick = emptyTrash;
+}
+
 /* ============================================================
    BOARDS — multiple mind-map pages, switchable from the toolbar
    ============================================================ */
 function renderBoardsLabel(){
   const el = document.getElementById("btnBoards");
   if(el && el.tagName !== "INPUT") el.textContent = activeBoard().name + "  ⌄";
+  renderBoardsSidebar();
 }
 function switchBoard(id){
   if(id===state.activeBoardId) return;
@@ -2152,24 +2390,100 @@ function startBoardRename(){
   });
   input.addEventListener("blur", ()=> finish(true));
 }
-function confirmDeleteBoardFlow(){
+function confirmDeleteBoardFlow(boardId){
   if(state.boards.length<=1) return toast("You need at least one board");
-  const board = activeBoard();
+  const id = boardId || state.activeBoardId;
+  const board = findBoard(id);
+  if(!board) return;
   ctxMenu.innerHTML = "";
   ctxMenu.appendChild(ctxLabel('Delete "' + board.name + '"? This removes all its cards.'));
   ctxMenu.appendChild(ctxSep());
   ctxMenu.appendChild(ctxItem("🗑","Yes, delete this board", ()=>{
     pushHistory();
-    const idx = state.boards.findIndex(b=>b.id===state.activeBoardId);
+    const idx = state.boards.findIndex(b=>b.id===id);
+    trashBoard(state.boards[idx]);
     state.boards.splice(idx,1);
-    state.activeBoardId = state.boards[Math.max(0, idx-1)].id;
+    if(state.activeBoardId===id) state.activeBoardId = state.boards[Math.max(0, idx-1)].id;
     selectedId = null; centerViewportIfNeeded();
     applyTheme(); applyStyle();
-    renderAll(); renderBoardsLabel(); scheduleSave(); toast("Board deleted");
+    renderAll(); renderBoardsLabel(); scheduleSave(); toast("Board deleted — recoverable from Trash");
   }, true));
   ctxMenu.appendChild(ctxItem("←","Cancel", hideContextMenu));
   ctxMenu.classList.remove("hidden");
 }
+function openBoardRowMenu(boardId, x, y){
+  ctxMenu.innerHTML = "";
+  ctxMenu.appendChild(ctxItem("✎","Rename", ()=> startSidebarRowRename(boardId)));
+  if(state.boards.length>1) ctxMenu.appendChild(ctxItem("🗑","Delete this board", ()=> confirmDeleteBoardFlow(boardId), true));
+  placeContextMenu(x,y);
+}
+function renderBoardsSidebar(){
+  const list = document.getElementById("boardsSidebarList");
+  if(!list) return;
+  list.innerHTML = "";
+  state.boards.forEach(b=>{
+    const row = document.createElement("div");
+    row.className = "board-row" + (b.id===state.activeBoardId ? " active" : "");
+    row.dataset.boardId = b.id;
+    const name = document.createElement("span"); name.className = "board-row-name";
+    name.textContent = (b.id===state.activeBoardId ? "● " : "○ ") + b.name;
+    name.onclick = ()=> switchBoard(b.id); // sidebar stays open — it's a persistent panel now, not a one-shot drawer
+    const more = document.createElement("button"); more.className = "board-row-more"; more.textContent = "⋯";
+    more.onclick = (e)=>{ e.stopPropagation(); openBoardRowMenu(b.id, e.currentTarget.getBoundingClientRect().left, e.currentTarget.getBoundingClientRect().bottom+4); };
+    row.appendChild(name); row.appendChild(more);
+    list.appendChild(row);
+  });
+}
+function startSidebarRowRename(boardId){
+  const board = findBoard(boardId); if(!board) return;
+  const row = document.querySelector('#boardsSidebarList .board-row[data-board-id="'+boardId+'"]');
+  if(!row) return;
+  const nameEl = row.querySelector(".board-row-name");
+  if(!nameEl) return;
+  const input = document.createElement("input");
+  input.type = "text"; input.value = board.name; input.className = "board-row-rename-input";
+  nameEl.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  function finish(save){
+    if(done) return; done = true;
+    if(save){ const v = input.value.trim(); if(v) board.name = v; scheduleSave(); }
+    renderBoardsSidebar();
+    if(state.activeBoardId===boardId) renderBoardsLabel();
+  }
+  input.addEventListener("pointerdown", e=> e.stopPropagation());
+  input.addEventListener("click", e=> e.stopPropagation());
+  input.addEventListener("keydown", e=>{
+    e.stopPropagation();
+    if(e.key==="Enter"){ e.preventDefault(); finish(true); }
+    else if(e.key==="Escape"){ e.preventDefault(); finish(false); }
+  });
+  input.addEventListener("blur", ()=> finish(true));
+}
+function closeBoardsSidebarOnMobileTap(){
+  if(matchMedia("(max-width:720px)").matches){
+    const sb = document.getElementById("boardsSidebar");
+    if(sb && sb.classList.contains("open")) closeBoardsSidebar();
+  }
+}
+function openBoardsSidebar(){
+  document.getElementById("boardsSidebar").classList.add("open");
+  const qa = document.getElementById("quickActions"); if(qa) qa.style.display = "none";
+  positionBoardsSidebar();
+  renderBoardsSidebar();
+}
+function closeBoardsSidebar(){
+  document.getElementById("boardsSidebar").classList.remove("open");
+  const qa = document.getElementById("quickActions"); if(qa && !multiSelected.size) qa.style.display = "";
+}
+function toggleBoardsSidebar(){
+  const open = document.getElementById("boardsSidebar").classList.contains("open");
+  if(open) closeBoardsSidebar(); else openBoardsSidebar();
+}
+document.getElementById("btnBoardsSidebar").onclick = (e)=>{ e.stopPropagation(); toggleBoardsSidebar(); };
+document.getElementById("boardsSidebarClose").onclick = closeBoardsSidebar;
+document.getElementById("boardsSidebarNew").onclick = ()=>{ createBoardFlow(); };
+document.getElementById("boardsSidebarTrash").onclick = ()=> openPanel("trash");
 function openBoardsMenu(anchorEl){
   const r = anchorEl.getBoundingClientRect();
   ctxMenu.innerHTML = "";
@@ -2192,11 +2506,11 @@ document.getElementById("btnBoards").onclick = (e)=>{
    ============================================================ */
 function applyTheme(){ document.documentElement.setAttribute("data-theme", activeBoard().theme || "light"); }
 function applyStyle(){ document.documentElement.setAttribute("data-style", activeBoard().style || "sketch"); }
-document.getElementById("btnTheme").onclick = ()=>{
+function toggleThemeLightDark(){
   const b = activeBoard();
   b.theme = b.theme==="dark" ? "light" : "dark";
   applyTheme(); renderAll(); scheduleSave();
-};
+}
 const STYLE_OPTIONS = [
   {key:"classic", label:"Classic", desc:"Clean, quiet, serif"},
   {key:"sketch",  label:"Sketch",  desc:"Hand-drawn notebook"},
@@ -2207,10 +2521,13 @@ function setStyle(key){
   applyStyle(); renderAll(); scheduleSave();
   toast(STYLE_OPTIONS.find(s=>s.key===key).label + " style");
 }
-document.getElementById("btnStyle").onclick = (e)=>{
+document.getElementById("btnTheme").onclick = (e)=>{
   e.stopPropagation();
   const r = e.currentTarget.getBoundingClientRect();
   ctxMenu.innerHTML = "";
+  const isDark = activeBoard().theme==="dark";
+  ctxMenu.appendChild(ctxItem(isDark?"☀":"☾", isDark ? "Switch to light" : "Switch to dark", toggleThemeLightDark));
+  ctxMenu.appendChild(ctxSep());
   STYLE_OPTIONS.forEach(opt=>{
     const active = (activeBoard().style||"sketch")===opt.key;
     ctxMenu.appendChild(ctxItem(active?"●":"○", opt.label + " — " + opt.desc, ()=> setStyle(opt.key)));
@@ -2276,6 +2593,7 @@ document.getElementById("btnMore").onclick = (e)=>{
   ctxMenu.appendChild(ctxItem("⬆","Import JSON", ()=> document.getElementById("importFile").click()));
   ctxMenu.appendChild(ctxItem("🖨","Print map", ()=> window.print()));
   ctxMenu.appendChild(ctxSep());
+  ctxMenu.appendChild(ctxItem("🗑","Trash", ()=> openPanel("trash")));
   ctxMenu.appendChild(ctxItem("⚠","Reset this board...", showResetConfirm, true));
   placeContextMenu(r.left, r.bottom+6);
 };
@@ -2285,9 +2603,11 @@ function showResetConfirm(){
   ctxMenu.appendChild(ctxSep());
   ctxMenu.appendChild(ctxItem("⚠","Yes, reset the canvas", ()=>{
     pushHistory();
+    const boardId = state.activeBoardId;
+    nodesArr().forEach(n=> trashNode(n, boardId));
     activeBoard().nodes = [seedNode("central","MY PERSONALITY",null,"central","indigo",0,0,"")];
     nodesArr()[0].example=false;
-    selectedId=null; renderAll(); scheduleSave(); toast("Canvas reset");
+    selectedId=null; renderAll(); scheduleSave(); toast("Canvas reset — old cards recoverable from Trash");
   }, true));
   ctxMenu.appendChild(ctxItem("←","Cancel", hideContextMenu));
   ctxMenu.classList.remove("hidden");
@@ -2318,16 +2638,52 @@ function init(){
   applyStyle();
   renderAll();
   renderBoardsLabel();
+  // the boards sidebar starts open (see its HTML), so keep the floating
+  // quick-action pills out of its way from the very first paint too
+  if(document.getElementById("boardsSidebar").classList.contains("open")){
+    document.getElementById("quickActions").style.display = "none";
+  }
+  positionBoardsSidebar();
   initCloud();
   registerServiceWorker();
-  window.addEventListener("resize", ()=>applyTransform());
+  window.addEventListener("resize", ()=>{ applyTransform(); positionBoardsSidebar(); });
+}
+function positionBoardsSidebar(){
+  // The toolbar floats on top of the sidebar (so its buttons stay clickable),
+  // which means the sidebar's own header must start below the toolbar's
+  // actual rendered height — measured live so it's correct at any screen
+  // size or font scale, rather than a guessed pixel value that breaks later.
+  const tb = document.querySelector(".toolbar");
+  const sidebar = document.getElementById("boardsSidebar");
+  if(tb && sidebar) sidebar.style.top = (tb.getBoundingClientRect().bottom + 10) + "px";
 }
 function registerServiceWorker(){
   // Only meaningful once deployed (e.g. on Vercel) alongside service-worker.js;
   // harmless no-op inside a preview where that file doesn't exist.
   if(!("serviceWorker" in navigator)) return;
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("service-worker.js").catch(()=>{});
+    navigator.serviceWorker.register("service-worker.js").then((reg)=>{
+      if(!reg) return;
+      // Actively re-check for a newer service worker whenever the app is
+      // opened or brought back to the foreground — this is what makes an
+      // *installed* app (which Android often just resumes rather than
+      // fully reloads) actually notice a new deploy instead of sitting
+      // on whatever version it last loaded.
+      reg.update().catch(()=>{});
+      document.addEventListener("visibilitychange", ()=>{
+        if(document.visibilityState==="visible") reg.update().catch(()=>{});
+      });
+    }).catch(()=>{});
+    // Once a new service worker takes over, the page it's running is
+    // already stale relative to the code that's now in charge — reload
+    // once, automatically, so the person always ends up on the version
+    // that matches what actually just took control.
+    let refreshedOnce = false;
+    navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+      if(refreshedOnce) return;
+      refreshedOnce = true;
+      window.location.reload();
+    });
   });
 }
 init();
