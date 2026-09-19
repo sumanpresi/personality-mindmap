@@ -460,6 +460,7 @@ input[type=range]{width:100%;accent-color:var(--accent);}
   <div class="boards-sidebar-list" id="boardsSidebarList"></div>
   <div class="boards-sidebar-foot">
     <button class="btn primary small" id="boardsSidebarNew">＋ New board</button>
+    <button class="btn small" id="boardsSidebarTrash" style="margin-top:6px;">🗑 Trash</button>
   </div>
 </div>
 
@@ -496,6 +497,7 @@ input[type=range]{width:100%;accent-color:var(--accent);}
     <div class="ptab" data-tab="dashboard">Dashboard</div>
     <div class="ptab" data-tab="review">Review</div>
     <div class="ptab" data-tab="search">Search</div>
+    <div class="ptab" data-tab="trash">Trash</div>
   </div>
   <div class="panel-body" id="panelBody"></div>
 </div>
@@ -660,6 +662,7 @@ function freshState(){
     activeBoardId: board.id,
     dimensions: defaultDimensions(),
     reviews: [],
+    trash: { nodes: [], boards: [] },
     settings: { snap:false }
   };
 }
@@ -683,6 +686,7 @@ function migrateState(parsed){
       activeBoardId: boards.some(b=>b.id===parsed.activeBoardId) ? parsed.activeBoardId : boards[0].id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
+      trash: { nodes: (parsed.trash&&parsed.trash.nodes)||[], boards: (parsed.trash&&parsed.trash.boards)||[] },
       settings: Object.assign({snap:false}, parsed.settings||{})
     };
   } else if(Array.isArray(parsed.nodes)){
@@ -694,6 +698,7 @@ function migrateState(parsed){
       boards:[board], activeBoardId: board.id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
+      trash: { nodes: (parsed.trash&&parsed.trash.nodes)||[], boards: (parsed.trash&&parsed.trash.boards)||[] },
       settings: { snap: s.snap || false }
     };
   } else {
@@ -905,8 +910,55 @@ function deleteNode(id){
   const node = getNode(id); if(!node) return;
   // reparent direct children up to this node's parent to avoid orphaning the tree
   children(id).forEach(c=> c.parentId = node.parentId);
+  trashNode(node, state.activeBoardId);
   activeBoard().nodes = nodesArr().filter(n=>n.id!==id);
   if(selectedId===id) selectedId=null;
+}
+
+/* ---------- Trash: a safety net for accidental deletes ---------- */
+function trashNode(node, boardId){
+  state.trash.nodes.unshift(Object.assign({}, node, {boardId, deletedAt: Date.now()}));
+  if(state.trash.nodes.length>200) state.trash.nodes.length = 200; // bounded — oldest fall off first
+}
+function trashBoard(board){
+  state.trash.boards.unshift(Object.assign({}, board, {deletedAt: Date.now()}));
+  if(state.trash.boards.length>50) state.trash.boards.length = 50;
+}
+function restoreNode(trashedId){
+  const idx = state.trash.nodes.findIndex(n=>n.id===trashedId);
+  if(idx<0) return;
+  const trashed = state.trash.nodes[idx];
+  const board = findBoard(trashed.boardId) || activeBoard();
+  const restored = Object.assign({}, trashed);
+  delete restored.boardId; delete restored.deletedAt;
+  if(restored.parentId && !board.nodes.some(n=>n.id===restored.parentId)) restored.parentId = null; // original parent is gone — restore as a root card instead
+  if(board.nodes.some(n=>n.id===restored.id)) restored.id = uid(); // guard against an (extremely unlikely) id collision
+  pushHistory();
+  board.nodes.push(restored);
+  state.trash.nodes.splice(idx,1);
+  if(board.id===state.activeBoardId) renderAll();
+  scheduleSave();
+  toast("Restored \u201c" + restored.text + "\u201d" + (board.id!==state.activeBoardId ? " to \u201c"+board.name+"\u201d" : ""));
+}
+function restoreBoard(trashedId){
+  const idx = state.trash.boards.findIndex(b=>b.id===trashedId);
+  if(idx<0) return;
+  const restored = Object.assign({}, state.trash.boards[idx]);
+  delete restored.deletedAt;
+  if(state.boards.some(b=>b.id===restored.id)) restored.id = uid();
+  pushHistory();
+  state.boards.push(restored);
+  state.trash.boards.splice(idx,1);
+  renderBoardsLabel(); scheduleSave();
+  toast("Restored board \u201c" + restored.name + "\u201d");
+}
+function permanentlyDeleteTrashedNode(id){ state.trash.nodes = state.trash.nodes.filter(n=>n.id!==id); scheduleSave(); }
+function permanentlyDeleteTrashedBoard(id){ state.trash.boards = state.trash.boards.filter(b=>b.id!==id); scheduleSave(); }
+function emptyTrash(){
+  if(!state.trash.nodes.length && !state.trash.boards.length) return toast("Trash is already empty");
+  pushHistory();
+  state.trash = {nodes:[], boards:[]};
+  scheduleSave(); renderTrashTab(); toast("Trash emptied");
 }
 
 function detachNode(id){
@@ -1090,16 +1142,20 @@ function copyIds(ids, cut){
   document.getElementById("btnPaste").classList.remove("disabled");
   if(cut){
     pushHistory();
-    deleteNodesBatch(ids);
+    deleteNodesBatch(ids, {skipTrash:true});
     if(ids.some(id=>multiSelected.has(id))) clearMultiSelection();
     renderAll(); scheduleSave();
   }
 }
-function deleteNodesBatch(ids){
+function deleteNodesBatch(ids, opts){
   const idSet = new Set(ids);
   const parentOf = {}; nodesArr().forEach(n=> parentOf[n.id]=n.parentId);
   function nearestSurvivingAncestor(pid){ while(pid && idSet.has(pid)) pid = parentOf[pid]; return pid || null; }
   nodesArr().forEach(n=>{ if(!idSet.has(n.id) && idSet.has(n.parentId)) n.parentId = nearestSurvivingAncestor(n.parentId); });
+  if(!opts || !opts.skipTrash){
+    const boardId = state.activeBoardId;
+    ids.forEach(id=>{ const n = getNode(id); if(n) trashNode(n, boardId); });
+  }
   activeBoard().nodes = nodesArr().filter(n=>!idSet.has(n.id));
   if(idSet.has(selectedId)) selectedId=null;
 }
@@ -1873,6 +1929,7 @@ function updatePanel(){
   else if(panelTab==="dashboard") renderDashboardTab();
   else if(panelTab==="review") renderReviewTab();
   else if(panelTab==="search") renderSearchTab();
+  else if(panelTab==="trash") renderTrashTab();
 }
 
 /* ---------- DETAILS TAB ---------- */
@@ -2188,6 +2245,39 @@ function runSearch(q){
   });
 }
 
+/* ---------- TRASH TAB ---------- */
+function renderTrashTab(){
+  panelTitle.textContent = "Trash";
+  const trash = state.trash || {nodes:[], boards:[]};
+  const faint = 'style="color:var(--text-faint);font-size:11px;"';
+  const boardsHtml = trash.boards.length ? trash.boards.map(b=>`
+    <div class="listitem"><span class="name">${escapeHtml(b.name)} <span ${faint}>(${b.nodes.length} card${b.nodes.length===1?"":"s"})</span></span>
+    <span><button class="btn small" data-restoreboard="${b.id}">Restore</button>
+    <button class="btn small danger" data-purgeboard="${b.id}">Delete forever</button></span></div>
+  `).join("") : `<div class="empty-state">No deleted boards.</div>`;
+  const nodesHtml = trash.nodes.length ? trash.nodes.map(n=>{
+    const fromBoard = findBoard(n.boardId);
+    return `<div class="listitem"><span class="name">${escapeHtml(n.text)} <span ${faint}>${fromBoard?"from \u201c"+escapeHtml(fromBoard.name)+"\u201d":"(original board deleted)"}</span></span>
+    <span><button class="btn small" data-restorenode="${n.id}">Restore</button>
+    <button class="btn small danger" data-purgenode="${n.id}">Delete forever</button></span></div>`;
+  }).join("") : `<div class="empty-state">No deleted cards.</div>`;
+  panelBody.innerHTML = `
+    <div class="field hint" style="margin-bottom:10px;">Deleted cards and boards stay here until you restore them or empty the trash.</div>
+    <div class="btnrow" style="margin-bottom:2px;"><button class="btn small danger" id="btnEmptyTrash">Empty trash</button></div>
+    <div class="divider"></div>
+    <div class="sectiontitle">Deleted boards (${trash.boards.length})</div>
+    ${boardsHtml}
+    <div class="divider"></div>
+    <div class="sectiontitle">Deleted cards (${trash.nodes.length})</div>
+    ${nodesHtml}
+  `;
+  panelBody.querySelectorAll("[data-restoreboard]").forEach(b=> b.onclick = ()=>{ restoreBoard(b.dataset.restoreboard); renderTrashTab(); });
+  panelBody.querySelectorAll("[data-purgeboard]").forEach(b=> b.onclick = ()=>{ permanentlyDeleteTrashedBoard(b.dataset.purgeboard); renderTrashTab(); });
+  panelBody.querySelectorAll("[data-restorenode]").forEach(b=> b.onclick = ()=>{ restoreNode(b.dataset.restorenode); renderTrashTab(); });
+  panelBody.querySelectorAll("[data-purgenode]").forEach(b=> b.onclick = ()=>{ permanentlyDeleteTrashedNode(b.dataset.purgenode); renderTrashTab(); });
+  document.getElementById("btnEmptyTrash").onclick = emptyTrash;
+}
+
 /* ============================================================
    BOARDS — multiple mind-map pages, switchable from the toolbar
    ============================================================ */
@@ -2258,11 +2348,12 @@ function confirmDeleteBoardFlow(boardId){
   ctxMenu.appendChild(ctxItem("🗑","Yes, delete this board", ()=>{
     pushHistory();
     const idx = state.boards.findIndex(b=>b.id===id);
+    trashBoard(state.boards[idx]);
     state.boards.splice(idx,1);
     if(state.activeBoardId===id) state.activeBoardId = state.boards[Math.max(0, idx-1)].id;
     selectedId = null; centerViewportIfNeeded();
     applyTheme(); applyStyle();
-    renderAll(); renderBoardsLabel(); scheduleSave(); toast("Board deleted");
+    renderAll(); renderBoardsLabel(); scheduleSave(); toast("Board deleted — recoverable from Trash");
   }, true));
   ctxMenu.appendChild(ctxItem("←","Cancel", hideContextMenu));
   ctxMenu.classList.remove("hidden");
@@ -2333,6 +2424,7 @@ function toggleBoardsSidebar(){
 document.getElementById("btnBoardsSidebar").onclick = (e)=>{ e.stopPropagation(); toggleBoardsSidebar(); };
 document.getElementById("boardsSidebarClose").onclick = closeBoardsSidebar;
 document.getElementById("boardsSidebarNew").onclick = ()=>{ createBoardFlow(); };
+document.getElementById("boardsSidebarTrash").onclick = ()=> openPanel("trash");
 function openBoardsMenu(anchorEl){
   const r = anchorEl.getBoundingClientRect();
   ctxMenu.innerHTML = "";
@@ -2442,6 +2534,7 @@ document.getElementById("btnMore").onclick = (e)=>{
   ctxMenu.appendChild(ctxItem("⬆","Import JSON", ()=> document.getElementById("importFile").click()));
   ctxMenu.appendChild(ctxItem("🖨","Print map", ()=> window.print()));
   ctxMenu.appendChild(ctxSep());
+  ctxMenu.appendChild(ctxItem("🗑","Trash", ()=> openPanel("trash")));
   ctxMenu.appendChild(ctxItem("⚠","Reset this board...", showResetConfirm, true));
   placeContextMenu(r.left, r.bottom+6);
 };
@@ -2451,9 +2544,11 @@ function showResetConfirm(){
   ctxMenu.appendChild(ctxSep());
   ctxMenu.appendChild(ctxItem("⚠","Yes, reset the canvas", ()=>{
     pushHistory();
+    const boardId = state.activeBoardId;
+    nodesArr().forEach(n=> trashNode(n, boardId));
     activeBoard().nodes = [seedNode("central","MY PERSONALITY",null,"central","indigo",0,0,"")];
     nodesArr()[0].example=false;
-    selectedId=null; renderAll(); scheduleSave(); toast("Canvas reset");
+    selectedId=null; renderAll(); scheduleSave(); toast("Canvas reset — old cards recoverable from Trash");
   }, true));
   ctxMenu.appendChild(ctxItem("←","Cancel", hideContextMenu));
   ctxMenu.classList.remove("hidden");
