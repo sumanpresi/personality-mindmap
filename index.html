@@ -2265,6 +2265,7 @@ function renderBoardsSidebar(){
 function openBoardsSidebar(){
   document.getElementById("boardsSidebar").classList.add("open");
   const qa = document.getElementById("quickActions"); if(qa) qa.style.display = "none";
+  positionBoardsSidebar();
   renderBoardsSidebar();
 }
 function closeBoardsSidebar(){
@@ -2434,9 +2435,19 @@ function init(){
   if(document.getElementById("boardsSidebar").classList.contains("open")){
     document.getElementById("quickActions").style.display = "none";
   }
+  positionBoardsSidebar();
   initCloud();
   registerServiceWorker();
-  window.addEventListener("resize", ()=>applyTransform());
+  window.addEventListener("resize", ()=>{ applyTransform(); positionBoardsSidebar(); });
+}
+function positionBoardsSidebar(){
+  // The toolbar floats on top of the sidebar (so its buttons stay clickable),
+  // which means the sidebar's own header must start below the toolbar's
+  // actual rendered height — measured live so it's correct at any screen
+  // size or font scale, rather than a guessed pixel value that breaks later.
+  const tb = document.querySelector(".toolbar");
+  const sidebar = document.getElementById("boardsSidebar");
+  if(tb && sidebar) sidebar.style.top = (tb.getBoundingClientRect().bottom + 10) + "px";
 }
 function registerServiceWorker(){
   // Only meaningful once deployed (e.g. on Vercel) alongside service-worker.js;
