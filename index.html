@@ -573,13 +573,14 @@ function resolveOverlaps(nodes, iterations){
 }
 
 function freshState(){
-  const board = { id: uid(), name: "My Personality", nodes: buildStarterNodes(), camera:{zoom:1,panX:0,panY:0} };
+  const board = { id: uid(), name: "My Personality", nodes: buildStarterNodes(), camera:{zoom:1,panX:0,panY:0},
+    style: "sketch", theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark":"light" };
   return {
     boards: [board],
     activeBoardId: board.id,
     dimensions: defaultDimensions(),
     reviews: [],
-    settings: { theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark":"light", style:"sketch", snap:false }
+    settings: { snap:false }
   };
 }
 /* Accepts either the current multi-board format or the original single-board
@@ -588,27 +589,32 @@ function migrateState(parsed){
   if(!parsed) return freshState();
   let result;
   if(Array.isArray(parsed.boards) && parsed.boards.length){
+    const legacyStyle = (parsed.settings && parsed.settings.style) || "sketch";
+    const legacyTheme = (parsed.settings && parsed.settings.theme) || "light";
     const boards = parsed.boards.map(b=>({
       id: b.id || uid(), name: b.name || "Board",
       nodes: Array.isArray(b.nodes) ? b.nodes : [],
-      camera: b.camera || {zoom:1,panX:0,panY:0}
+      camera: b.camera || {zoom:1,panX:0,panY:0},
+      style: b.style || legacyStyle,   // each board remembers its own look now, synced with everything else
+      theme: b.theme || legacyTheme
     }));
     result = {
       boards,
       activeBoardId: boards.some(b=>b.id===parsed.activeBoardId) ? parsed.activeBoardId : boards[0].id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
-      settings: Object.assign({theme:"light", style:"sketch", snap:false}, parsed.settings||{})
+      settings: Object.assign({snap:false}, parsed.settings||{})
     };
   } else if(Array.isArray(parsed.nodes)){
     const s = parsed.settings || {};
     const board = { id: uid(), name:"My Personality", nodes: parsed.nodes,
-      camera: {zoom: s.zoom||1, panX: s.panX||0, panY: s.panY||0} };
+      camera: {zoom: s.zoom||1, panX: s.panX||0, panY: s.panY||0},
+      style: s.style || "sketch", theme: s.theme || "light" };
     result = {
       boards:[board], activeBoardId: board.id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
-      settings: { theme: s.theme || "light", style: s.style || "sketch", snap: s.snap || false }
+      settings: { snap: s.snap || false }
     };
   } else {
     return freshState();
@@ -668,6 +674,7 @@ async function onSignedIn(session){
     if(error) throw error;
     if(data && data.state){
       state = migrateState(data.state);
+      applyTheme(); applyStyle();
       renderAll(); renderBoardsLabel();
       toast("Synced from your account");
     } else {
@@ -721,6 +728,7 @@ function importJSON(file){
       pushHistory();
       state = migrateState(parsed);
       selectedId = null;
+      applyTheme(); applyStyle();
       renderAll(); renderBoardsLabel(); scheduleSave();
       toast("Imported map");
     }catch(e){ toast("Import failed — invalid file"); }
@@ -741,12 +749,14 @@ function undo(){
   if(!history.length) return toast("Nothing to undo");
   future.push(JSON.stringify(state));
   state = JSON.parse(history.pop());
+  applyTheme(); applyStyle();
   renderAll(); renderBoardsLabel(); scheduleSave(); toast("Undid last change");
 }
 function redo(){
   if(!future.length) return toast("Nothing to redo");
   history.push(JSON.stringify(state));
   state = JSON.parse(future.pop());
+  applyTheme(); applyStyle();
   renderAll(); renderBoardsLabel(); scheduleSave(); toast("Redid change");
 }
 
@@ -1278,7 +1288,7 @@ function positionCard(el, node){
 
 function curvePath(x1,y1,x2,y2,seed){
   const mx = (x1+x2)/2;
-  if(state.settings.style==="sketch" && typeof seed==="number"){
+  if(activeBoard().style==="sketch" && typeof seed==="number"){
     // deterministic per-connection wobble baked right into the curve's control points —
     // a genuinely irregular hand-drawn line, but with zero ongoing rendering cost
     // (no live SVG filter recomputing on every zoom/pan frame).
@@ -2090,6 +2100,7 @@ function switchBoard(id){
   selectedId = null;
   multiSelected.clear(); renderSelectionBar(); // selection is per-board; the clipboard is not affected
   centerViewportIfNeeded();
+  applyTheme(); applyStyle(); // each board carries its own look
   renderAll(); renderBoardsLabel(); scheduleSave();
   toast("Switched to \u201c" + activeBoard().name + "\u201d");
 }
@@ -2100,11 +2111,13 @@ function createBoardFlow(){
   const central = { id: uid(), text: name.toUpperCase(), description:"", type:"central", x:0, y:0, parentId:null,
     color:"indigo", score:null, desiredScore:null, status:null, links:[],
     createdAt:Date.now(), updatedAt:Date.now(), example:false };
-  const board = { id: uid(), name, nodes:[central], camera:{zoom:1,panX:0,panY:0} };
+  const board = { id: uid(), name, nodes:[central], camera:{zoom:1,panX:0,panY:0},
+    style: activeBoard().style || "sketch", theme: activeBoard().theme || "light" };
   state.boards.push(board);
   state.activeBoardId = board.id;
   selectedId = null;
   centerViewportIfNeeded();
+  applyTheme(); applyStyle();
   renderAll(); renderBoardsLabel(); scheduleSave();
   toast("New board created");
   startBoardRename();
@@ -2144,6 +2157,7 @@ function confirmDeleteBoardFlow(){
     state.boards.splice(idx,1);
     state.activeBoardId = state.boards[Math.max(0, idx-1)].id;
     selectedId = null; centerViewportIfNeeded();
+    applyTheme(); applyStyle();
     renderAll(); renderBoardsLabel(); scheduleSave(); toast("Board deleted");
   }, true));
   ctxMenu.appendChild(ctxItem("←","Cancel", hideContextMenu));
@@ -2169,10 +2183,11 @@ document.getElementById("btnBoards").onclick = (e)=>{
 /* ============================================================
    THEME / MORE MENU / EXPORT-IMPORT WIRING
    ============================================================ */
-function applyTheme(){ document.documentElement.setAttribute("data-theme", state.settings.theme); }
-function applyStyle(){ document.documentElement.setAttribute("data-style", state.settings.style || "sketch"); }
+function applyTheme(){ document.documentElement.setAttribute("data-theme", activeBoard().theme || "light"); }
+function applyStyle(){ document.documentElement.setAttribute("data-style", activeBoard().style || "sketch"); }
 document.getElementById("btnTheme").onclick = ()=>{
-  state.settings.theme = state.settings.theme==="dark" ? "light" : "dark";
+  const b = activeBoard();
+  b.theme = b.theme==="dark" ? "light" : "dark";
   applyTheme(); renderAll(); scheduleSave();
 };
 const STYLE_OPTIONS = [
@@ -2181,7 +2196,7 @@ const STYLE_OPTIONS = [
   {key:"bold",    label:"Bold Idea", desc:"Vivid poster style"}
 ];
 function setStyle(key){
-  state.settings.style = key;
+  activeBoard().style = key;
   applyStyle(); renderAll(); scheduleSave();
   toast(STYLE_OPTIONS.find(s=>s.key===key).label + " style");
 }
@@ -2190,7 +2205,7 @@ document.getElementById("btnStyle").onclick = (e)=>{
   const r = e.currentTarget.getBoundingClientRect();
   ctxMenu.innerHTML = "";
   STYLE_OPTIONS.forEach(opt=>{
-    const active = (state.settings.style||"sketch")===opt.key;
+    const active = (activeBoard().style||"sketch")===opt.key;
     ctxMenu.appendChild(ctxItem(active?"●":"○", opt.label + " — " + opt.desc, ()=> setStyle(opt.key)));
   });
   placeContextMenu(r.left, r.bottom+6);
