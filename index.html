@@ -1326,6 +1326,13 @@ function openCardContextMenu(id, x, y){
     const label = inGroup ? " " + copyIdList.length + " cards" : " this card";
     ctxMenu.appendChild(ctxItem("⧉","Copy" + label, ()=> copyIds(copyIdList, false)));
     ctxMenu.appendChild(ctxItem("✂","Cut" + label, ()=> copyIds(copyIdList, true)));
+    const kids = descendantsOf(id);
+    if(!inGroup && kids.length){
+      const branchIds = [id, ...kids];
+      const branchLabel = " this card + " + kids.length + " child" + (kids.length>1?"ren":"");
+      ctxMenu.appendChild(ctxItem("⧉","Copy" + branchLabel, ()=> copyIds(branchIds, false)));
+      ctxMenu.appendChild(ctxItem("✂","Cut" + branchLabel, ()=> copyIds(branchIds, true)));
+    }
     if(clipboard) ctxMenu.appendChild(ctxItem("📋","Paste here", ()=> pasteClipboard({x,y})));
   }
   ctxMenu.appendChild(ctxSep());
