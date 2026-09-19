@@ -145,6 +145,10 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
   transition:box-shadow .15s ease, opacity .2s ease, filter .2s ease;}
 .card:active{cursor:grabbing;}
 .card.dim{opacity:.22;}
+.resize-handle{position:absolute;right:-7px;bottom:-7px;width:15px;height:15px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--card-bg);cursor:nwse-resize;touch-action:none;
+  display:none;z-index:3;}
+.card.selected .resize-handle{display:block;}
 .card.shape-pill{border-radius:999px !important;}
 .card.shape-circle{border-radius:50% !important;aspect-ratio:1/1;
   display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;}
@@ -390,6 +394,18 @@ input[type=range]{width:100%;accent-color:var(--accent);}
     padding-bottom:4px;scrollbar-width:none;}
   .toolbar::-webkit-scrollbar{display:none;}
   .tb-group{flex:none;}
+  /* Reorder the toolbar on mobile only: Theme/Fit/Center (used constantly while
+     switching boards) take the prime slot right after the board name, and
+     Undo/Redo (used far less often) move down to where that group used to be.
+     Desktop layout is untouched — order defaults to source order there. */
+  .toolbar .tb-group:nth-child(1){order:1;} /* hamburger */
+  .toolbar .tb-group:nth-child(2){order:2;} /* board name */
+  .toolbar .tb-group:nth-child(3){order:5;} /* Undo / Redo */
+  .toolbar .tb-group:nth-child(4){order:4;} /* New card */
+  .toolbar .tb-group:nth-child(5){order:3;} /* Theme / Fit / Center */
+  .toolbar .tb-group:nth-child(6){order:6;} /* Select / Paste */
+  .toolbar .tb-group:nth-child(7){order:7;} /* Search / Dashboard / Review */
+  .toolbar .tb-group:nth-child(8){order:8;} /* Sync / More */
   .tb-btn{flex-direction:column;gap:2px;padding:8px 12px 7px;font-size:19px;min-width:46px;}
   .tb-btn .lbl,.tb-btn .lbl.mobile-only{display:block;font-size:9.5px;font-weight:700;
     line-height:1;letter-spacing:.1px;color:var(--text-muted);}
@@ -572,7 +588,7 @@ function defaultDimensions(){
 
 function seedNode(id,text,parentId,type,color,x,y,description){
   return {id, text, description: description||"", type, x, y, parentId: parentId||null,
-    color, score:null, desiredScore:null, status:null, links:[],
+    color, score:null, desiredScore:null, status:null, links:[], width:null, height:null,
     createdAt: Date.now(), updatedAt: Date.now(), example:true};
 }
 
@@ -897,7 +913,7 @@ function createNode(parentId, text, opts){
     x: base.x + Math.cos(angle)*dist, y: base.y + Math.sin(angle)*dist,
     parentId: parentId||null,
     color: (opts&&opts.color) || (parent? parent.color : "neutral"),
-    score:null, desiredScore:null, status: opts&&opts.status || null, links: [], shape: null,
+    score:null, desiredScore:null, status: opts&&opts.status || null, links: [], shape: null, width: null, height: null,
     createdAt: Date.now(), updatedAt: Date.now(), example:false
   };
   if(opts) Object.assign(node, opts, {id:node.id});
@@ -1233,6 +1249,7 @@ viewport.addEventListener("pointerdown",(e)=>{
     if(e.target.closest(".card")){ activePointers.delete(e.pointerId); return; } // the card handles its own drag
     hideContextMenu();
     if(!selectMode){ deselect(); clearMultiSelection(); }
+    closeBoardsSidebarOnMobileTap(e.pointerType);
     if(selectMode) beginMarquee(e.clientX, e.clientY); else beginPan(e.clientX, e.clientY);
     if(e.pointerType==="touch"){
       const sx=e.clientX, sy=e.clientY;
@@ -1415,10 +1432,16 @@ function renderNode(node){
     bl.addEventListener("pointerdown", e=> e.stopPropagation());
     el.appendChild(bl);
   }
+  if(node.width || node.height){
+    el.style.maxWidth = "none"; el.style.minWidth = "0";
+    if(node.width) el.style.width = node.width + "px";
+    if(node.height) el.style.height = node.height + "px";
+  }
   positionCard(el, node);
   cardsLayer.appendChild(el);
   cardEls[node.id] = el;
   attachCardEvents(el, node.id);
+  if(node.type!=="central") attachResizeHandle(el, node.id);
 }
 
 function positionCard(el, node){
@@ -1475,6 +1498,7 @@ function attachCardEvents(el, id){
     e.stopPropagation();
     activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY}); // keep the global gesture count accurate
     if(!selectMode) clearMultiSelection(); // a normal (non-select-mode) card click ends any active multi-selection
+    closeBoardsSidebarOnMobileTap(e.pointerType);
     selectNode(id);
     const node = getNode(id);
     const wp = screenToWorld(e.clientX, e.clientY);
@@ -1523,6 +1547,47 @@ function attachCardEvents(el, id){
   el.addEventListener("dblclick",(e)=>{ e.stopPropagation(); selectNode(id); startInlineEdit(id); });
   el.addEventListener("contextmenu",(e)=>{ e.preventDefault(); e.stopPropagation(); selectNode(id); openCardContextMenu(id, e.clientX, e.clientY); });
   attachLongPress(el, (x,y)=>{ selectNode(id); openCardContextMenu(id, x, y); });
+}
+
+/* ---------- Resize handle (drag the corner to freely reshape a card) ---------- */
+function attachResizeHandle(el, id){
+  const handle = document.createElement("div"); handle.className = "resize-handle";
+  el.appendChild(handle);
+  let rs = null;
+  handle.addEventListener("pointerdown",(e)=>{
+    e.stopPropagation();
+    const node = getNode(id); if(!node) return;
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    const rect = el.getBoundingClientRect();
+    const zoom = activeBoard().camera.zoom;
+    rs = { startX:e.clientX, startY:e.clientY, startW: rect.width/zoom, startH: rect.height/zoom };
+    handle.setPointerCapture(e.pointerId);
+  });
+  handle.addEventListener("pointermove",(e)=>{
+    if(!rs) return;
+    const node = getNode(id); if(!node) return;
+    const zoom = activeBoard().camera.zoom;
+    const dx = (e.clientX-rs.startX)/zoom, dy = (e.clientY-rs.startY)/zoom;
+    node.width = Math.max(90, Math.round(rs.startW + dx));
+    node.height = Math.max(50, Math.round(rs.startH + dy));
+    el.style.minWidth = "0"; el.style.maxWidth = "640px";
+    el.style.width = node.width + "px"; el.style.height = node.height + "px";
+  });
+  function endResize(e){
+    activePointers.delete(e.pointerId);
+    if(!rs) return;
+    rs = null;
+    pushHistory(); scheduleSave();
+  }
+  handle.addEventListener("pointerup", endResize);
+  handle.addEventListener("pointercancel", endResize);
+  handle.addEventListener("dblclick",(e)=>{
+    e.stopPropagation();
+    pushHistory();
+    const node = getNode(id); node.width=null; node.height=null;
+    renderAll(); selectNode(id); scheduleSave();
+    toast("Size reset to fit content");
+  });
 }
 
 /* ---------- Inline title editing (double-click a card) ---------- */
@@ -2407,6 +2472,17 @@ function startSidebarRowRename(boardId){
   });
   input.addEventListener("blur", ()=> finish(true));
 }
+function closeBoardsSidebarOnMobileTap(pointerType){
+  // Trigger on: a touch/pen tap (any screen size — covers a Z Fold's large inner
+  // screen, which reports a logical width well above any sensible px breakpoint),
+  // OR a narrow viewport with any pointer type (small desktop windows, split-screen).
+  const isTouchLike = pointerType==="touch" || pointerType==="pen";
+  const isNarrow = matchMedia("(max-width:900px)").matches;
+  if(isTouchLike || isNarrow){
+    const sb = document.getElementById("boardsSidebar");
+    if(sb && sb.classList.contains("open")) closeBoardsSidebar();
+  }
+}
 function openBoardsSidebar(){
   document.getElementById("boardsSidebar").classList.add("open");
   const qa = document.getElementById("quickActions"); if(qa) qa.style.display = "none";
@@ -2603,7 +2679,28 @@ function registerServiceWorker(){
   // harmless no-op inside a preview where that file doesn't exist.
   if(!("serviceWorker" in navigator)) return;
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("service-worker.js").catch(()=>{});
+    navigator.serviceWorker.register("service-worker.js").then((reg)=>{
+      if(!reg) return;
+      // Actively re-check for a newer service worker whenever the app is
+      // opened or brought back to the foreground — this is what makes an
+      // *installed* app (which Android often just resumes rather than
+      // fully reloads) actually notice a new deploy instead of sitting
+      // on whatever version it last loaded.
+      reg.update().catch(()=>{});
+      document.addEventListener("visibilitychange", ()=>{
+        if(document.visibilityState==="visible") reg.update().catch(()=>{});
+      });
+    }).catch(()=>{});
+    // Once a new service worker takes over, the page it's running is
+    // already stale relative to the code that's now in charge — reload
+    // once, automatically, so the person always ends up on the version
+    // that matches what actually just took control.
+    let refreshedOnce = false;
+    navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+      if(refreshedOnce) return;
+      refreshedOnce = true;
+      window.location.reload();
+    });
   });
 }
 init();
