@@ -218,7 +218,7 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
   border:1px solid var(--panel-border);}
 
 /* ============================= TOOLBAR ============================= */
-.toolbar{position:fixed;top:16px;left:16px;z-index:40;display:flex;gap:8px;align-items:center;
+.toolbar{position:fixed;top:16px;left:16px;z-index:50;display:flex;gap:8px;align-items:center;
   flex-wrap:wrap;max-width:calc(100vw - 32px);}
 .tb-group{display:flex;gap:4px;background:var(--panel);backdrop-filter:blur(14px);
   border:1px solid var(--panel-border);border-radius:12px;padding:5px;box-shadow:var(--shadow-lg);}
@@ -244,6 +244,27 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 .zoomctl .pct{text-align:center;font-size:11px;color:var(--text-muted);padding:4px 0;border-top:1px solid var(--panel-border);border-bottom:1px solid var(--panel-border);}
 
 /* ============================= SIDE PANEL ============================= */
+/* ============================= BOARDS SIDEBAR ============================= */
+#boardsSidebar{position:fixed;top:0;left:0;bottom:0;width:280px;max-width:84vw;background:var(--panel);
+  backdrop-filter:blur(18px);border-right:1px solid var(--panel-border);z-index:49;
+  display:flex;flex-direction:column;transform:translateX(-100%);
+  transition:transform .28s cubic-bezier(.2,.8,.2,1);box-shadow:18px 0 40px rgba(0,0,0,.12);}
+#boardsSidebar.open{transform:translateX(0);}
+.boards-sidebar-head{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 10px;
+  border-bottom:1px solid var(--panel-border);}
+.boards-sidebar-head h2{font-family:var(--font-display);font-size:17px;margin:0;font-weight:600;}
+.boards-sidebar-list{flex:1;overflow-y:auto;padding:8px;}
+.board-row{display:flex;align-items:center;justify-content:space-between;gap:6px;
+  padding:10px 10px;border-radius:10px;cursor:pointer;}
+.board-row:hover{background:var(--accent-soft);}
+.board-row.active .board-row-name{font-weight:700;}
+.board-row-name{flex:1;font-size:13.5px;cursor:pointer;}
+.board-row-more{border:none;background:transparent;color:var(--text-muted);cursor:pointer;
+  padding:4px 8px;border-radius:6px;font-size:15px;}
+.board-row-more:hover{background:var(--panel-border);}
+.boards-sidebar-foot{padding:12px 16px;border-top:1px solid var(--panel-border);}
+.boards-sidebar-foot .btn{width:100%;}
+
 #panel{position:fixed;top:0;right:0;bottom:0;width:340px;max-width:92vw;background:var(--panel);
   backdrop-filter:blur(18px);border-left:1px solid var(--panel-border);z-index:50;
   display:flex;flex-direction:column;transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
@@ -382,6 +403,9 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 <!-- TOOLBAR -->
 <div class="toolbar">
   <div class="tb-group">
+    <button class="tb-btn icon-only" id="btnBoardsSidebar" title="Show/hide boards">☰</button>
+  </div>
+  <div class="tb-group">
     <div class="brand" id="btnBoards" title="Switch or manage boards">My Personality  ⌄</div>
   </div>
   <div class="tb-group">
@@ -415,6 +439,18 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 <div id="quickActions">
   <button id="qaAdd"><span class="qa-icon">✚</span><span class="qa-text">Quick Add<small>Capture a thought</small></span></button>
   <button id="qaSearch"><span class="qa-icon">🔍</span><span class="qa-text">Search</span></button>
+</div>
+
+<!-- BOARDS SIDEBAR -->
+<div id="boardsSidebar" class="open">
+  <div class="boards-sidebar-head">
+    <h2>Boards</h2>
+    <button class="panel-close" id="boardsSidebarClose">✕</button>
+  </div>
+  <div class="boards-sidebar-list" id="boardsSidebarList"></div>
+  <div class="boards-sidebar-foot">
+    <button class="btn primary small" id="boardsSidebarNew">＋ New board</button>
+  </div>
 </div>
 
 <!-- SELECTION ACTION BAR -->
@@ -2127,6 +2163,7 @@ function runSearch(q){
 function renderBoardsLabel(){
   const el = document.getElementById("btnBoards");
   if(el && el.tagName !== "INPUT") el.textContent = activeBoard().name + "  ⌄";
+  renderBoardsSidebar();
 }
 function switchBoard(id){
   if(id===state.activeBoardId) return;
@@ -2179,17 +2216,19 @@ function startBoardRename(){
   });
   input.addEventListener("blur", ()=> finish(true));
 }
-function confirmDeleteBoardFlow(){
+function confirmDeleteBoardFlow(boardId){
   if(state.boards.length<=1) return toast("You need at least one board");
-  const board = activeBoard();
+  const id = boardId || state.activeBoardId;
+  const board = findBoard(id);
+  if(!board) return;
   ctxMenu.innerHTML = "";
   ctxMenu.appendChild(ctxLabel('Delete "' + board.name + '"? This removes all its cards.'));
   ctxMenu.appendChild(ctxSep());
   ctxMenu.appendChild(ctxItem("🗑","Yes, delete this board", ()=>{
     pushHistory();
-    const idx = state.boards.findIndex(b=>b.id===state.activeBoardId);
+    const idx = state.boards.findIndex(b=>b.id===id);
     state.boards.splice(idx,1);
-    state.activeBoardId = state.boards[Math.max(0, idx-1)].id;
+    if(state.activeBoardId===id) state.activeBoardId = state.boards[Math.max(0, idx-1)].id;
     selectedId = null; centerViewportIfNeeded();
     applyTheme(); applyStyle();
     renderAll(); renderBoardsLabel(); scheduleSave(); toast("Board deleted");
@@ -2197,6 +2236,48 @@ function confirmDeleteBoardFlow(){
   ctxMenu.appendChild(ctxItem("←","Cancel", hideContextMenu));
   ctxMenu.classList.remove("hidden");
 }
+function startBoardRenameFor(boardId){
+  if(boardId && boardId!==state.activeBoardId) switchBoard(boardId);
+  startBoardRename();
+}
+function openBoardRowMenu(boardId, x, y){
+  ctxMenu.innerHTML = "";
+  ctxMenu.appendChild(ctxItem("✎","Rename", ()=> startBoardRenameFor(boardId)));
+  if(state.boards.length>1) ctxMenu.appendChild(ctxItem("🗑","Delete this board", ()=> confirmDeleteBoardFlow(boardId), true));
+  placeContextMenu(x,y);
+}
+function renderBoardsSidebar(){
+  const list = document.getElementById("boardsSidebarList");
+  if(!list) return;
+  list.innerHTML = "";
+  state.boards.forEach(b=>{
+    const row = document.createElement("div");
+    row.className = "board-row" + (b.id===state.activeBoardId ? " active" : "");
+    const name = document.createElement("span"); name.className = "board-row-name";
+    name.textContent = (b.id===state.activeBoardId ? "● " : "○ ") + b.name;
+    name.onclick = ()=> switchBoard(b.id); // sidebar stays open — it's a persistent panel now, not a one-shot drawer
+    const more = document.createElement("button"); more.className = "board-row-more"; more.textContent = "⋯";
+    more.onclick = (e)=>{ e.stopPropagation(); openBoardRowMenu(b.id, e.currentTarget.getBoundingClientRect().left, e.currentTarget.getBoundingClientRect().bottom+4); };
+    row.appendChild(name); row.appendChild(more);
+    list.appendChild(row);
+  });
+}
+function openBoardsSidebar(){
+  document.getElementById("boardsSidebar").classList.add("open");
+  const qa = document.getElementById("quickActions"); if(qa) qa.style.display = "none";
+  renderBoardsSidebar();
+}
+function closeBoardsSidebar(){
+  document.getElementById("boardsSidebar").classList.remove("open");
+  const qa = document.getElementById("quickActions"); if(qa && !multiSelected.size) qa.style.display = "";
+}
+function toggleBoardsSidebar(){
+  const open = document.getElementById("boardsSidebar").classList.contains("open");
+  if(open) closeBoardsSidebar(); else openBoardsSidebar();
+}
+document.getElementById("btnBoardsSidebar").onclick = (e)=>{ e.stopPropagation(); toggleBoardsSidebar(); };
+document.getElementById("boardsSidebarClose").onclick = closeBoardsSidebar;
+document.getElementById("boardsSidebarNew").onclick = ()=>{ createBoardFlow(); };
 function openBoardsMenu(anchorEl){
   const r = anchorEl.getBoundingClientRect();
   ctxMenu.innerHTML = "";
@@ -2348,6 +2429,11 @@ function init(){
   applyStyle();
   renderAll();
   renderBoardsLabel();
+  // the boards sidebar starts open (see its HTML), so keep the floating
+  // quick-action pills out of its way from the very first paint too
+  if(document.getElementById("boardsSidebar").classList.contains("open")){
+    document.getElementById("quickActions").style.display = "none";
+  }
   initCloud();
   registerServiceWorker();
   window.addEventListener("resize", ()=>applyTransform());
