@@ -4,13 +4,42 @@
 <meta charset="UTF-8">
 <title>My Personality — Mind Map</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#F2994A">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Personality">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Kalam:wght@400;700&family=Baloo+2:wght@500;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
 <style>
 /* ============================= CONFIG / TOKENS ============================= */
-:root{
+/* Three selectable visual styles (Classic / Sketch / Bold), each with its own
+   light + dark pair, all sharing the exact same variable names — so every
+   other rule in this file just reads var(--x) and never needs to know which
+   style is active. Structural differences (card shape, wobble, etc.) are
+   scoped separately below under [data-style="..."] selectors. */
+:root{ /* fallback = Sketch, in case data-style hasn't been set yet */
+  --bg:#FBF5E9; --bg-dot:rgba(90,70,40,.12);
+  --panel:rgba(255,251,242,.90); --panel-border:rgba(90,70,40,.14);
+  --text:#3E3324; --text-muted:#8C7C60; --text-faint:#B7A98A;
+  --card-bg:#FFFCF4; --card-shadow:rgba(120,90,40,.20);
+  --accent:#F2994A; --accent-soft:rgba(242,153,74,.20);
+  --danger:#E0584A;
+  --c-indigo:#9AA6F2; --c-emerald:#7ED6A5; --c-amber:#FFC15E; --c-pink:#FF9EC0;
+  --c-violet:#C7A6F2; --c-gold:#FFD873; --c-cyan:#7FD3EA; --c-teal:#6BDCC0; --c-neutral:#C4B9A0;
+  --font-display:'Patrick Hand',ui-rounded,'Comic Sans MS',cursive,sans-serif;
+  --font-marker:'Kalam',var(--font-display);
+  --font-body:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --radius:16px; --shadow-lg:0 16px 36px rgba(120,90,40,.18);
+}
+
+/* ---- Classic: the original clean serif/glass look ---- */
+:root[data-style="classic"]{
   --bg:#EEF0F5; --bg-dot:rgba(20,22,30,.10);
   --panel:rgba(255,255,255,.86); --panel-border:rgba(20,22,30,.10);
   --text:#1A1D27; --text-muted:#6B7080; --text-faint:#9297a8;
@@ -20,10 +49,10 @@
   --c-indigo:#5A62D6; --c-emerald:#1FAE7A; --c-amber:#D9761F; --c-pink:#D6469A;
   --c-violet:#7C5CD1; --c-gold:#B4890F; --c-cyan:#1493B8; --c-teal:#0FA394; --c-neutral:#6B7080;
   --font-display:'Fraunces',ui-serif,Georgia,'Times New Roman',serif;
-  --font-body:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-marker:var(--font-display);
   --radius:14px; --shadow-lg:0 18px 40px rgba(20,22,30,.16);
 }
-:root[data-theme="dark"]{
+:root[data-style="classic"][data-theme="dark"]{
   --bg:#12141A; --bg-dot:rgba(255,255,255,.07);
   --panel:rgba(24,26,34,.80); --panel-border:rgba(255,255,255,.09);
   --text:#EDEBE4; --text-muted:#9296A8; --text-faint:#666c80;
@@ -32,6 +61,56 @@
   --danger:#F0776D;
   --c-indigo:#8188F0; --c-emerald:#34D399; --c-amber:#F0954A; --c-pink:#F472B6;
   --c-violet:#A78BFA; --c-gold:#E8C25A; --c-cyan:#38BDF8; --c-teal:#2DD4BF; --c-neutral:#9296A8;
+}
+
+/* ---- Sketch: hand-drawn, warm cream notebook ---- */
+:root[data-style="sketch"]{
+  --bg:#FBF5E9; --bg-dot:rgba(90,70,40,.12);
+  --panel:rgba(255,251,242,.90); --panel-border:rgba(90,70,40,.14);
+  --text:#3E3324; --text-muted:#8C7C60; --text-faint:#B7A98A;
+  --card-bg:#FFFCF4; --card-shadow:rgba(120,90,40,.20);
+  --accent:#F2994A; --accent-soft:rgba(242,153,74,.20);
+  --danger:#E0584A;
+  --c-indigo:#9AA6F2; --c-emerald:#7ED6A5; --c-amber:#FFC15E; --c-pink:#FF9EC0;
+  --c-violet:#C7A6F2; --c-gold:#FFD873; --c-cyan:#7FD3EA; --c-teal:#6BDCC0; --c-neutral:#C4B9A0;
+  --font-display:'Patrick Hand',ui-rounded,'Comic Sans MS',cursive,sans-serif;
+  --font-marker:'Kalam',var(--font-display);
+  --radius:16px; --shadow-lg:0 16px 36px rgba(120,90,40,.18);
+}
+:root[data-style="sketch"][data-theme="dark"]{
+  --bg:#231D16; --bg-dot:rgba(255,230,190,.09);
+  --panel:rgba(38,32,24,.85); --panel-border:rgba(255,230,190,.10);
+  --text:#F5EAD9; --text-muted:#C4B49B; --text-faint:#8C7C60;
+  --card-bg:#2E2619; --card-shadow:rgba(0,0,0,.55);
+  --accent:#FFA95E; --accent-soft:rgba(255,169,94,.22);
+  --danger:#F0776D;
+  --c-indigo:#A9B3F5; --c-emerald:#7EDDAA; --c-amber:#FFCB74; --c-pink:#FFA9CB;
+  --c-violet:#D3B6FA; --c-gold:#FFE08A; --c-cyan:#8CDFF2; --c-teal:#79E8CC; --c-neutral:#B9AC90;
+}
+
+/* ---- Bold Idea: vivid poster style, inspired by flat brainstorm illustrations ---- */
+:root[data-style="bold"]{
+  --bg:#4F58E8; --bg-dot:rgba(255,255,255,.14);
+  --panel:rgba(255,255,255,.94); --panel-border:rgba(20,20,50,.14);
+  --text:#1B1B33; --text-muted:#5A5A85; --text-faint:#9090BE;
+  --card-bg:#FFFFFF; --card-shadow:rgba(15,15,50,.30);
+  --accent:#FFC93C; --accent-soft:rgba(255,201,60,.30);
+  --danger:#FF5A5F;
+  --c-indigo:#6C6CF2; --c-emerald:#2FD48A; --c-amber:#FF9A3C; --c-pink:#FF5FA0;
+  --c-violet:#9B6CF6; --c-gold:#FFD23C; --c-cyan:#3EC6F0; --c-teal:#2AD9C4; --c-neutral:#8E93C4;
+  --font-display:'Baloo 2',ui-rounded,'Segoe UI',sans-serif;
+  --font-marker:var(--font-display);
+  --radius:16px; --shadow-lg:0 18px 40px rgba(10,10,40,.30);
+}
+:root[data-style="bold"][data-theme="dark"]{
+  --bg:#17171F; --bg-dot:rgba(255,255,255,.10);
+  --panel:rgba(30,30,42,.90); --panel-border:rgba(255,255,255,.12);
+  --text:#F5F3FF; --text-muted:#B4B0D6; --text-faint:#726E96;
+  --card-bg:#232232; --card-shadow:rgba(0,0,0,.6);
+  --accent:#FFE066; --accent-soft:rgba(255,224,102,.24);
+  --danger:#FF7A7F;
+  --c-indigo:#8A8AF5; --c-emerald:#4FE3A2; --c-amber:#FFAE5C; --c-pink:#FF7EB6;
+  --c-violet:#B592FA; --c-gold:#FFDE6E; --c-cyan:#6AD6F5; --c-teal:#4FE8D2; --c-neutral:#A4A8D8;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
@@ -48,6 +127,12 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
   background-image:radial-gradient(var(--bg-dot) 1.4px, transparent 1.4px);
   background-size:26px 26px;}
 #viewport.panning{cursor:grabbing;}
+[data-style="sketch"] #viewport::before,[data-style="sketch"] #viewport::after,
+[data-style="bold"] #viewport::before,[data-style="bold"] #viewport::after{
+  content:"✦";position:fixed;font-size:22px;color:var(--accent-soft);
+  pointer-events:none;z-index:1;opacity:.55;}
+[data-style="sketch"] #viewport::before,[data-style="bold"] #viewport::before{top:14%;right:6%;}
+[data-style="sketch"] #viewport::after,[data-style="bold"] #viewport::after{bottom:10%;left:4%;font-size:16px;}
 #world{position:absolute;top:0;left:0;width:1px;height:1px;transform-origin:0 0;}
 #connLayer{position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;}
 #connLayer path{fill:none;transition:stroke .2s ease;}
@@ -55,14 +140,24 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 
 /* ============================= CARDS ============================= */
 .card{position:absolute;top:0;left:0;min-width:150px;max-width:230px;
-  background:var(--card-bg);border-radius:10px;padding:11px 13px 10px 14px;
-  box-shadow:0 6px 16px var(--card-shadow),0 1px 2px var(--card-shadow);
-  border-left:4px solid var(--card-accent,var(--accent));
+  background:var(--card-bg);padding:11px 14px 10px 15px;
   cursor:grab;user-select:none;touch-action:none;-webkit-touch-callout:none;transform:translate(-50%,-50%);
   transition:box-shadow .15s ease, opacity .2s ease, filter .2s ease;}
 .card:active{cursor:grabbing;}
 .card.dim{opacity:.22;}
-.card .card-title{font-size:13.5px;font-weight:600;line-height:1.32;word-break:break-word;}
+.card .card-title{font-family:var(--font-display);font-size:17px;font-weight:400;line-height:1.28;word-break:break-word;}
+
+/* ---- per-style card shape/shadow/border treatment ---- */
+[data-style="classic"] .card{border-radius:10px;border-left:4px solid var(--card-accent,var(--accent));
+  box-shadow:0 6px 16px var(--card-shadow),0 1px 2px var(--card-shadow);}
+[data-style="classic"] .card .card-title{font-size:13.5px;font-weight:600;line-height:1.32;}
+
+[data-style="sketch"] .card{border-radius:16px 22px 18px 24px;border:2px solid var(--card-accent,var(--accent));
+  box-shadow:2.5px 3.5px 0 0 var(--card-accent,var(--accent)),0 8px 18px var(--card-shadow);}
+
+[data-style="bold"] .card{border-radius:14px;border:2.5px solid var(--card-accent,var(--accent));
+  box-shadow:3px 4px 0 0 var(--card-accent,var(--accent)),0 10px 20px var(--card-shadow);}
+[data-style="bold"] .card .card-title{font-weight:700;}
 .card .card-title.editing{outline:1.5px solid var(--card-accent,var(--accent));border-radius:5px;
   padding:1px 3px;margin:-1px -3px;cursor:text;user-select:text;-webkit-user-select:text;}
 .card .card-desc{margin-top:4px;font-size:11.5px;color:var(--text-muted);line-height:1.35;
@@ -88,14 +183,32 @@ button,input,textarea,select{font-family:inherit;color:inherit;}
 .tb-btn.active{background:var(--accent);color:#fff;}
 .tb-btn.disabled{opacity:.4;pointer-events:none;}
 .card.dragtarget{box-shadow:0 0 0 3px var(--accent), 0 0 0 7px var(--accent-soft);}
-.card.central{width:190px;height:190px;text-align:center;padding:20px 22px;border-left:none;
-  border-radius:50%;display:flex;align-items:center;justify-content:center;
-  background:var(--card-bg);
-  box-shadow:0 0 0 3px var(--panel-border),0 0 42px 4px var(--accent-soft),0 16px 40px var(--card-shadow);}
-.card.central .card-title{font-family:var(--font-display);font-size:19px;font-weight:600;letter-spacing:.2px;}
-.card.central.selected{box-shadow:0 0 0 3px var(--accent),0 0 46px 6px var(--accent-soft),0 16px 40px var(--card-shadow);}
+.card.central{width:196px;height:196px;text-align:center;padding:20px 22px;
+  border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:2;}
+.card.central .card-title{font-family:var(--font-marker);font-size:21px;font-weight:700;letter-spacing:.2px;}
+.card.central.selected{box-shadow:2.5px 3.5px 0 0 var(--accent),0 0 0 4px var(--accent-soft),0 16px 40px var(--card-shadow);}
 .card.branch{min-width:150px;font-weight:600;}
-.card.improvement{border-left-style:dashed;min-width:150px;}
+.card.improvement{min-width:150px;}
+[data-style="classic"] .card.improvement{border-left-style:dashed;}
+[data-style="sketch"] .card.improvement,[data-style="bold"] .card.improvement{border-style:dashed;}
+
+/* ---- per-style central "idea" node ---- */
+[data-style="classic"] .card.central{background:var(--card-bg);border:none;
+  box-shadow:0 0 0 3px var(--panel-border),0 0 42px 4px var(--accent-soft),0 16px 40px var(--card-shadow);}
+[data-style="classic"] .card.central.selected{box-shadow:0 0 0 3px var(--accent),0 0 46px 6px var(--accent-soft),0 16px 40px var(--card-shadow);}
+
+[data-style="sketch"] .card.central,[data-style="bold"] .card.central{
+  background:radial-gradient(circle at 38% 32%, #FFFBEF 0%, var(--card-bg) 70%);
+  border:3px solid var(--accent);
+  box-shadow:2.5px 3.5px 0 0 var(--accent),0 16px 36px var(--card-shadow);}
+[data-style="sketch"] .card.central::before,[data-style="bold"] .card.central::before{
+  content:"";position:absolute;inset:-34px;border-radius:50%;z-index:-1;
+  background:repeating-conic-gradient(var(--accent-soft) 0deg 3deg, transparent 3deg 18deg);
+  -webkit-mask-image:radial-gradient(closest-side, transparent 62%, black 64%);
+  mask-image:radial-gradient(closest-side, transparent 62%, black 64%);
+  opacity:.85;pointer-events:none;}
+[data-style="sketch"] .card.central .card-title::before,
+[data-style="bold"] .card.central .card-title::before{content:"💡 ";}
 .card .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c-neutral);
   margin-right:5px;vertical-align:middle;}
 .card .status-dot.done{background:var(--c-emerald);}
@@ -235,6 +348,22 @@ input[type=range]{width:100%;accent-color:var(--accent);}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="sketchy0" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="3" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/>
+    </filter>
+    <filter id="sketchy1" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="11" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="6"/>
+    </filter>
+    <filter id="sketchy2" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="27" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="4"/>
+    </filter>
+  </defs>
+</svg>
 
 <div id="viewport">
   <div id="world">
@@ -269,6 +398,7 @@ input[type=range]{width:100%;accent-color:var(--accent);}
   </div>
   <div class="tb-group">
     <button class="tb-btn icon-only" id="btnTheme" title="Toggle theme">◐</button>
+    <button class="tb-btn icon-only" id="btnStyle" title="Change visual style">🎨</button>
     <button class="tb-btn" id="btnAuth" title="Sync across devices">☁︎ Sign in to sync</button>
     <button class="tb-btn icon-only" id="btnMore" title="More">⋯</button>
   </div>
@@ -465,7 +595,7 @@ function freshState(){
     activeBoardId: board.id,
     dimensions: defaultDimensions(),
     reviews: [],
-    settings: { theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark":"light", snap:false }
+    settings: { theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark":"light", style:"sketch", snap:false }
   };
 }
 /* Accepts either the current multi-board format or the original single-board
@@ -484,7 +614,7 @@ function migrateState(parsed){
       activeBoardId: boards.some(b=>b.id===parsed.activeBoardId) ? parsed.activeBoardId : boards[0].id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
-      settings: Object.assign({theme:"light", snap:false}, parsed.settings||{})
+      settings: Object.assign({theme:"light", style:"sketch", snap:false}, parsed.settings||{})
     };
   } else if(Array.isArray(parsed.nodes)){
     const s = parsed.settings || {};
@@ -494,7 +624,7 @@ function migrateState(parsed){
       boards:[board], activeBoardId: board.id,
       dimensions: parsed.dimensions || defaultDimensions(),
       reviews: parsed.reviews || [],
-      settings: { theme: s.theme || "light", snap: s.snap || false }
+      settings: { theme: s.theme || "light", style: s.style || "sketch", snap: s.snap || false }
     };
   } else {
     return freshState();
@@ -1081,7 +1211,7 @@ function renderNode(node){
   el.dataset.id = node.id;
   const title = document.createElement("div"); title.className="card-title"; title.textContent = node.text;
   el.appendChild(title);
-  if(node.description){
+  if(node.description && node.type!=="central"){
     const d = document.createElement("div"); d.className="card-desc"; d.textContent = node.description;
     el.appendChild(d);
   }
@@ -1166,6 +1296,7 @@ function curvePath(x1,y1,x2,y2){
   const mx = (x1+x2)/2;
   return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
 }
+function strHash(s){ let h=0; for(let i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h); }
 function renderConnections(){
   svg.innerHTML="";
   nodesArr().forEach(n=>{
@@ -1173,10 +1304,11 @@ function renderConnections(){
     const p = getNode(n.parentId); if(!p) return;
     const path = document.createElementNS("http://www.w3.org/2000/svg","path");
     path.setAttribute("d", curvePath(p.x,p.y,n.x,n.y));
-    const w = n.type==="branch" ? 3 : n.type==="improvement" ? 1.4 : 2;
+    const w = n.type==="branch" ? 4 : n.type==="improvement" ? 1.6 : 2.4;
     path.setAttribute("stroke-width", w);
     path.setAttribute("stroke", cssColor(n.color));
     path.setAttribute("stroke-linecap","round");
+    if(state.settings.style==="sketch") path.setAttribute("filter", "url(#sketchy" + (strHash(n.id)%3) + ")");
     path.dataset.from = p.id; path.dataset.to = n.id;
     svg.appendChild(path);
   });
@@ -2047,9 +2179,30 @@ document.getElementById("btnBoards").onclick = (e)=>{
    THEME / MORE MENU / EXPORT-IMPORT WIRING
    ============================================================ */
 function applyTheme(){ document.documentElement.setAttribute("data-theme", state.settings.theme); }
+function applyStyle(){ document.documentElement.setAttribute("data-style", state.settings.style || "sketch"); }
 document.getElementById("btnTheme").onclick = ()=>{
   state.settings.theme = state.settings.theme==="dark" ? "light" : "dark";
   applyTheme(); renderAll(); scheduleSave();
+};
+const STYLE_OPTIONS = [
+  {key:"classic", label:"Classic", desc:"Clean, quiet, serif"},
+  {key:"sketch",  label:"Sketch",  desc:"Hand-drawn notebook"},
+  {key:"bold",    label:"Bold Idea", desc:"Vivid poster style"}
+];
+function setStyle(key){
+  state.settings.style = key;
+  applyStyle(); renderAll(); scheduleSave();
+  toast(STYLE_OPTIONS.find(s=>s.key===key).label + " style");
+}
+document.getElementById("btnStyle").onclick = (e)=>{
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  ctxMenu.innerHTML = "";
+  STYLE_OPTIONS.forEach(opt=>{
+    const active = (state.settings.style||"sketch")===opt.key;
+    ctxMenu.appendChild(ctxItem(active?"●":"○", opt.label + " — " + opt.desc, ()=> setStyle(opt.key)));
+  });
+  placeContextMenu(r.left, r.bottom+6);
 };
 
 document.getElementById("btnAuth").onclick = (e)=>{
@@ -2149,10 +2302,20 @@ function init(){
   state = loadState();
   centerViewportIfNeeded();
   applyTheme();
+  applyStyle();
   renderAll();
   renderBoardsLabel();
   initCloud();
+  registerServiceWorker();
   window.addEventListener("resize", ()=>applyTransform());
+}
+function registerServiceWorker(){
+  // Only meaningful once deployed (e.g. on Vercel) alongside service-worker.js;
+  // harmless no-op inside a preview where that file doesn't exist.
+  if(!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("service-worker.js").catch(()=>{});
+  });
 }
 init();
 
